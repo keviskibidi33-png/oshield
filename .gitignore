@@ -1,2 +1,37 @@
-"# Dependencies\nnode_modules/\n.pnpm-store/\n\n# Next.js Build Output\n.next/\nlanding-next/out/\nlanding-next/.next/\n\n# Go compiled binaries\nozyagent\n*.exe\n*.exe~\n*.dll\n*.so\n*.dylib\nserver/server\nagent/ozyagent\n\n# Environment variables\n.env\
-<truncated 183 bytes>
+# Dependency directories
+node_modules/
+jspm_packages/
+.pnpm-store/
+
+# Next.js and Vite build outputs
+.next/
+out/
+dist/
+build/
+.cache/
+
+# Go compiled binaries and object files
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+server/ozyserver
+agent/ozyagent
+
+# Environment variables and secrets
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+
+# Operating System files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini

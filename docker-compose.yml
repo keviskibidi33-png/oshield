@@ -1,2 +1,38 @@
-"version: '3.8'\n\nservices:\n  # OzyShield Central REST API Server\n  ozyshield-server:\n    build:\n      context: ./server\n      dockerfile: Dockerfile\n    container_name: ozyshield-server\n    ports:\n      - \"8080:8080\"\n    environment:\n      - 
-<truncated 909 bytes>
+version: '3.8'
+
+services:
+  # Central REST API Server
+  ozyshield-server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    container_name: ozyshield-server
+    ports:
+      - "8080:8080"
+    environment:
+      - PORT=8080
+      - OPENAI_API_KEY=${OPENAI_API_KEY} # Optional: passes host's OpenAI key
+      - POSTGRES_USER=ozyshield
+      - POSTGRES_PASSWORD=ozysecurepass
+      - POSTGRES_DB=ozyshield
+      - POSTGRES_HOST=ozyshield-db
+    depends_on:
+      - ozyshield-db
+    restart: always
+
+  # PostgreSQL database for production persistence
+  ozyshield-db:
+    image: postgres:15-alpine
+    container_name: ozyshield-db
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=ozyshield
+      - POSTGRES_PASSWORD=ozysecurepass
+      - POSTGRES_DB=ozyshield
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: always
+
+volumes:
+  pgdata:
