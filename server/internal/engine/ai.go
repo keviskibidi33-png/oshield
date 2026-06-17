@@ -29,7 +29,7 @@ func AnalyzeLog(logLine string, service string) CachedDiagnosis {
 }
 
 func callOpenAI(apiKey string, logLine string, service string) (CachedDiagnosis, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	url := "https://api.openai.com/v1/chat/completions"
@@ -47,9 +47,15 @@ func callOpenAI(apiKey string, logLine string, service string) (CachedDiagnosis,
 		} `json:"response_format"`
 	}
 
+	model := os.Getenv("OPENAI_MODEL")
+	if model == "" {
+		model = "gpt-4o-mini"
+	}
+
 	prompt := `Eres un experto SRE y arquitecto de sistemas. Analiza el siguiente log de error de infraestructura y proporciona un diagnóstico y los pasos de solución.
 Debes responder estrictamente en formato JSON con la siguiente estructura:
 {
+  "title": "Título corto y descriptivo del incidente (máximo 60 caracteres, en inglés)",
   "cause": "Breve explicación en español de la causa raíz",
   "steps": [
     "Paso 1: Qué hacer para verificar o solucionar",
@@ -63,7 +69,7 @@ Log de error:
 Servicio relacionado: ` + service
 
 	reqBody := request{
-		Model: "gpt-4o-mini",
+		Model: model,
 		Messages: []message{
 			{Role: "user", Content: prompt},
 		},
@@ -128,6 +134,7 @@ func analyzeHeuristic(logLine string, service string) CachedDiagnosis {
 	if service == "postgresql" || strings.Contains(normalized, "postgres") || strings.Contains(normalized, "pq:") {
 		if strings.Contains(normalized, "lock timeout") || strings.Contains(normalized, "deadlock") {
 			return CachedDiagnosis{
+				Title: "PostgreSQL Lock Timeout",
 				Cause: "Un proceso o query de base de datos ha bloqueado recursos por encima del límite de tiempo configurado, generando un interbloqueo (deadlock).",
 				Steps: []string{
 					"Identificar las transacciones bloqueadoras consultando pg_stat_activity y pg_locks.",
@@ -138,6 +145,7 @@ func analyzeHeuristic(logLine string, service string) CachedDiagnosis {
 		}
 		if strings.Contains(normalized, "connection refused") || strings.Contains(normalized, "is not responding") {
 			return CachedDiagnosis{
+				Title: "PostgreSQL Connection Refused",
 				Cause: "La aplicación no pudo establecer conexión con PostgreSQL. El servicio podría estar detenido o rechazando tráfico.",
 				Steps: []string{
 					"Verificar el estado de PostgreSQL: ejecuta 'sudo systemctl status postgresql'.",
@@ -148,6 +156,7 @@ func analyzeHeuristic(logLine string, service string) CachedDiagnosis {
 		}
 		if strings.Contains(normalized, "too many connections") || strings.Contains(normalized, "connection limit exceeded") {
 			return CachedDiagnosis{
+				Title: "PostgreSQL Connection Limit Exceeded",
 				Cause: "Se excedió la cantidad máxima de conexiones simultáneas configuradas en PostgreSQL (max_connections).",
 				Steps: []string{
 					"Aumentar el límite de conexiones en postgresql.conf, o bien implementar un pooler de conexiones como PgBouncer.",
@@ -162,6 +171,7 @@ func analyzeHeuristic(logLine string, service string) CachedDiagnosis {
 	if service == "nginx" || strings.Contains(normalized, "nginx") {
 		if strings.Contains(normalized, "502 bad gateway") || strings.Contains(normalized, "connect() failed") {
 			return CachedDiagnosis{
+				Title: "Nginx 502 Bad Gateway",
 				Cause: "Nginx no pudo comunicarse con el servidor de aplicación upstream (Node.js, PHP-FPM, Python, etc.) porque este se encuentra apagado o no escucha en el socket.",
 				Steps: []string{
 					"Revisar el estado del servicio de backend upstream (ej. systemctl status node-app).",
@@ -172,6 +182,7 @@ func analyzeHeuristic(logLine string, service string) CachedDiagnosis {
 		}
 		if strings.Contains(normalized, "413 request entity too large") {
 			return CachedDiagnosis{
+				Title: "Nginx Request Entity Too Large",
 				Cause: "El cliente intentó subir un archivo o payload que supera el límite de tamaño de petición configurado en Nginx.",
 				Steps: []string{
 					"Abrir el archivo de configuración nginx.conf o de tu host virtual.",
@@ -182,6 +193,7 @@ func analyzeHeuristic(logLine string, service string) CachedDiagnosis {
 		}
 		if strings.Contains(normalized, "permission denied") {
 			return CachedDiagnosis{
+				Title: "Nginx Permission Denied",
 				Cause: "Nginx no tiene permisos de lectura o ejecución sobre los archivos estáticos solicitados, o bien no puede acceder al socket upstream.",
 				Steps: []string{
 					"Verificar que el usuario 'www-data' o 'nginx' tenga permisos sobre la carpeta del proyecto: 'sudo chmod -R 755 /var/www'.",
@@ -195,6 +207,7 @@ func analyzeHeuristic(logLine string, service string) CachedDiagnosis {
 	// 3. Out of Memory (OOM) Diagnostics
 	if strings.Contains(normalized, "out of memory") || strings.Contains(normalized, "oom-killer") || strings.Contains(normalized, "killed process") {
 		return CachedDiagnosis{
+			Title: "Out of Memory (OOM Kill)",
 			Cause: "El sistema operativo agotó su memoria física (RAM) disponible y activó el proceso OOM-Killer para forzar el cierre de procesos de alto consumo y evitar un pánico general.",
 			Steps: []string{
 				"Consultar el registro dmesg del sistema para identificar el proceso exacto sacrificado: 'dmesg -T | grep -i -E \"oom|kill\"'.",
@@ -208,6 +221,7 @@ func analyzeHeuristic(logLine string, service string) CachedDiagnosis {
 	if service == "redis" || strings.Contains(normalized, "redis") {
 		if strings.Contains(normalized, "out of memory") || strings.Contains(normalized, "maxmemory limit reached") {
 			return CachedDiagnosis{
+				Title: "Redis Max Memory Reached",
 				Cause: "El servidor de caché Redis alcanzó el límite de memoria máximo (maxmemory) establecido en su configuración.",
 				Steps: []string{
 					"Verificar el consumo de memoria con el comando 'redis-cli info memory'.",
@@ -220,6 +234,7 @@ func analyzeHeuristic(logLine string, service string) CachedDiagnosis {
 
 	// 5. Fallback Heuristics
 	return CachedDiagnosis{
+		Title: "Infrastructure Warning Detected",
 		Cause: "Se ha detectado una advertencia o error en los logs de la infraestructura. La firma del evento no coincide con patrones conocidos del sistema.",
 		Steps: []string{
 			"Revisar el estado general de salud del servidor y del servicio relacionado.",

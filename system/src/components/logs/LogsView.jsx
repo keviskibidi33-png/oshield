@@ -140,7 +140,7 @@ export function LogsView() {
         ...filtered.map(inc => [
           inc.timestamp,
           inc.node_id,
-          '192.168.1.' + ((inc.node_id && inc.node_id.charCodeAt(0)) || 100) % 255,
+          nodeMap[inc.node_id]?.ip || '-',
           (inc.service || 'SYS_MON').toUpperCase(),
           inc.status,
           '"' + (inc.log_line || '').replace(/"/g, '""') + '"',
@@ -307,7 +307,7 @@ export function LogsView() {
             </thead>
             <tbody className="divide-y divide-[#1e2022]">
               {paginated.map((inc) => {
-                const sourceIP = '192.168.1.' + ((inc.node_id && inc.node_id.charCodeAt(0)) || 100) % 255
+                const sourceIP = nodeMap[inc.node_id]?.ip || '-'
                 const eventType = (inc.service || 'SYS_MON').toUpperCase().replace(/[^A-Z_]/g, '').slice(0, 8) || 'SYS_MON'
                 return (
                   <tr key={inc.id} onClick={() => navigate('/incidents/' + inc.id)}

@@ -2,6 +2,7 @@ package discovery
 
 import (
 	"context"
+	"net"
 	"os"
 	"os/exec"
 	"runtime"
@@ -12,6 +13,7 @@ import (
 // SystemMap represents the structural architecture scan of the client VM.
 type SystemMap struct {
 	Hostname   string            `json:"hostname"`
+	IP         string            `json:"ip,omitempty"`
 	OS         string            `json:"os"`
 	Platform   string            `json:"platform"`
 	CPUCount   int               `json:"cpu_count"`
@@ -47,6 +49,8 @@ func ScanSystem(ctx context.Context) *SystemMap {
 		sysMap.Hostname = "unknown"
 	}
 
+	sysMap.IP = detectLocalIP()
+
 	// Scan services based on the OS
 	for _, svc := range monitoredServices {
 		if runtime.GOOS == "windows" {
@@ -57,6 +61,21 @@ func ScanSystem(ctx context.Context) *SystemMap {
 	}
 
 	return sysMap
+}
+
+func detectLocalIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return ""
+	}
+	for _, addr := range addrs {
+		if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() {
+			if ipNet.IP.To4() != nil {
+				return ipNet.IP.String()
+			}
+		}
+	}
+	return ""
 }
 
 func checkServiceWindows(ctx context.Context, svc string) string {

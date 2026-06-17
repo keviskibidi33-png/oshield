@@ -42,9 +42,138 @@ const STATUS_CONFIG = {
   annulled: { label: 'ANNULLED', color: 'on-surface-variant', icon: 'block', bg: 'bg-on-surface-variant/10 border-on-surface-variant/20 text-on-surface-variant' },
 }
 
+function NodeModal({ nodeId, onClose }) {
+  const [node, setNode] = useState(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    if (!nodeId) return
+    setLoading(true)
+    api.get('/nodes').then(nodes => {
+      const found = nodes?.find(n => n.node_id === nodeId)
+      setNode(found || null)
+      setLoading(false)
+    }).catch(() => setLoading(false))
+  }, [nodeId])
+
+  useEffect(() => {
+    const handleEsc = (e) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', handleEsc)
+    return () => document.removeEventListener('keydown', handleEsc)
+  }, [onClose])
+
+  if (!nodeId) return null
+
+  const isOnline = node ? (Date.now() - new Date(node.last_seen).getTime() < 300000) : false
+  const serviceEntries = Object.entries(node?.services || {})
+  const activeCount = serviceEntries.filter(([, s]) => s === 'active').length
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+      <div className="relative bg-surface-container border border-[#1e2022] rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto custom-scrollbar"
+        onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-5 border-b border-[#1e2022]">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary-container/10 flex items-center justify-center border border-primary-container/20">
+              <span className="material-symbols-outlined text-primary" style={{ fontSize: 20 }}>dns</span>
+            </div>
+            <div>
+              <h3 className="text-[16px] font-semibold text-on-surface">Node Details</h3>
+              <p className="text-[11px] text-on-surface-variant">{nodeId}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg hover:bg-surface-container-high transition-colors">
+            <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 20 }}>close</span>
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="p-8 text-center">
+            <span className="material-symbols-outlined text-on-surface-variant animate-spin" style={{ fontSize: 24 }}>progress_activity</span>
+            <p className="text-[12px] text-on-surface-variant mt-2">Loading node data...</p>
+          </div>
+        ) : !node ? (
+          <div className="p-8 text-center">
+            <span className="material-symbols-outlined text-error block mb-2" style={{ fontSize: 32 }}>error</span>
+            <p className="text-[14px] text-on-surface">Node not found</p>
+            <p className="text-[12px] text-on-surface-variant mt-1">This node may have been removed or is not registered.</p>
+          </div>
+        ) : (
+          <div className="p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-[11px] text-on-surface-variant uppercase tracking-wider">Status</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className={`w-2 h-2 rounded-full ${isOnline ? 'bg-primary' : 'bg-on-surface-variant/40'}`} />
+                  <span className={`text-[13px] font-medium ${isOnline ? 'text-primary' : 'text-on-surface-variant'}`}>
+                    {isOnline ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-[11px] text-on-surface-variant uppercase tracking-wider">OS</p>
+                <div className="flex items-center gap-1.5 mt-1">
+                  <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 16 }}>
+                    {node.os === 'linux' ? 'terminal' : node.os === 'windows' ? 'desktop_windows' : 'laptop_mac'}
+                  </span>
+                  <span className="text-[13px] text-on-surface capitalize">{node.os}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg bg-surface-container-lowest border border-[#1e2022]">
+                <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">Platform</p>
+                <p className="text-[13px] text-on-surface mt-1 font-mono">{node.platform || 'N/A'}</p>
+              </div>
+              <div className="p-3 rounded-lg bg-surface-container-lowest border border-[#1e2022]">
+                <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">CPU Cores</p>
+                <p className="text-[13px] text-on-surface mt-1">{node.cpu_count || 'N/A'}</p>
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-surface-container-lowest border border-[#1e2022]">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">Services</p>
+                <span className="text-[11px] text-on-surface-variant">{activeCount}/{serviceEntries.length} active</span>
+              </div>
+              <div className="space-y-1.5">
+                {serviceEntries.map(([name, status]) => (
+                  <div key={name} className="flex items-center justify-between">
+                    <span className="text-[12px] text-on-surface font-mono">{name}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                      status === 'active' ? 'bg-primary/10 text-primary' :
+                      status === 'not_found' ? 'bg-on-surface-variant/10 text-on-surface-variant' :
+                      'bg-error/10 text-error'
+                    }`}>
+                      {status}
+                    </span>
+                  </div>
+                ))}
+                {serviceEntries.length === 0 && (
+                  <p className="text-[12px] text-on-surface-variant text-center py-2">No services reported</p>
+                )}
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-surface-container-lowest border border-[#1e2022]">
+              <p className="text-[10px] text-on-surface-variant uppercase tracking-wider">Last Seen</p>
+              <p className="text-[12px] text-on-surface mt-1">{new Date(node.last_seen).toLocaleString()}</p>
+              <p className="text-[10px] text-on-surface-variant mt-0.5">{timeAgo(node.last_seen)}</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function IncidentView() {
   const [updating, setUpdating] = useState(false)
+  const [reanalyzing, setReanalyzing] = useState(false)
   const [showTeamModal, setShowTeamModal] = useState(false)
+  const [showNodeModal, setShowNodeModal] = useState(false)
   const [teams, setTeams] = useState([])
   const navigate = useNavigate()
   const { id: incidentId } = useParams()
@@ -87,6 +216,16 @@ export function IncidentView() {
       setShowTeamModal(false)
     } catch (e) { console.error(e) }
     setUpdating(false)
+  }
+
+  const handleReanalyze = async () => {
+    if (!incident || reanalyzing) return
+    setReanalyzing(true)
+    try {
+      await api.post(`/incidents/${incident.id}/reanalyze`)
+      await refetch()
+    } catch (e) { console.error(e) }
+    setReanalyzing(false)
   }
 
   const handleGenerateReport = () => {
@@ -164,11 +303,6 @@ export function IncidentView() {
 
       <section className="mb-8 flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <div className="flex items-center gap-3 mb-2">
-            <span className="text-[12px] text-on-surface-variant tracking-widest uppercase font-medium">Security Incident</span>
-            <span className="text-on-surface-variant opacity-30">/</span>
-            <span className="text-[12px] text-primary font-medium">Triage</span>
-          </div>
           <div className="flex flex-wrap items-center gap-4">
             <h1 className="text-[30px] font-semibold text-on-surface">
               {incident.title || 'Incident'}
@@ -178,6 +312,16 @@ export function IncidentView() {
               <span className="material-symbols-outlined" style={{ fontSize: 14 }}>{sc.icon}</span>
               {sc.label}
             </div>
+            {incident.diagnosis_source && (
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase border ${
+                incident.diagnosis_source === 'ai' ? 'bg-primary/10 text-primary border-primary/20' :
+                incident.diagnosis_source === 'reanalyzed' ? 'bg-tertiary/10 text-tertiary border-tertiary/20' :
+                'bg-on-surface-variant/10 text-on-surface-variant border-on-surface-variant/20'
+              }`}>
+                {incident.diagnosis_source === 'ai' ? 'AI' :
+                 incident.diagnosis_source === 'reanalyzed' ? 'AI Re-analyzed' : 'Heuristic'}
+              </span>
+            )}
             {incident.assigned_team && (
               <span className="px-3 py-1 rounded-lg text-[12px] font-medium bg-primary/10 text-primary border border-primary/20 flex items-center gap-1.5">
                 <span className="material-symbols-outlined" style={{ fontSize: 14 }}>group</span>
@@ -190,6 +334,15 @@ export function IncidentView() {
           </p>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
+          {incident.status !== 'resolved' && incident.status !== 'annulled' && (
+            <button onClick={handleReanalyze} disabled={reanalyzing}
+              className="text-[12px] px-5 py-2.5 rounded-lg border border-primary/30 text-primary hover:bg-primary/10 transition-all font-medium disabled:opacity-50 flex items-center gap-2">
+              <span className={`material-symbols-outlined ${reanalyzing ? 'animate-spin' : ''}`} style={{ fontSize: 16 }}>
+                {reanalyzing ? 'progress_activity' : 'auto_awesome'}
+              </span>
+              {reanalyzing ? 'Analyzing...' : 'Re-analyze with AI'}
+            </button>
+          )}
           {incident.status === 'critical' && (
             <>
               <button onClick={() => setShowTeamModal(true)} disabled={updating}
@@ -256,7 +409,8 @@ export function IncidentView() {
             <span className="text-[12px] text-on-surface-variant">{new Date(incident.timestamp).toLocaleTimeString('en-US', { hour12: false })} UTC</span>
           </div>
         </div>
-        <div className="col-span-12 md:col-span-3 tonal-card p-5 rounded-xl flex flex-col justify-between hover:bg-surface-container-high transition-colors cursor-pointer">
+        <div className="col-span-12 md:col-span-3 tonal-card p-5 rounded-xl flex flex-col justify-between hover:bg-surface-container-high transition-colors cursor-pointer"
+          onClick={() => setShowNodeModal(true)}>
           <div>
             <span className="text-[12px] text-on-surface-variant flex items-center gap-2 font-medium">
               <span className="material-symbols-outlined" style={{ fontSize: 18 }}>dns</span>
@@ -316,7 +470,11 @@ export function IncidentView() {
               </div>
               <div>
                 <h2 className="text-[20px] font-semibold">Diagnosis Summary</h2>
-                <p className="text-[12px] text-on-surface-variant">AI-Generated Analysis & Root Cause</p>
+                <p className="text-[12px] text-on-surface-variant">
+                  {incident.diagnosis_source === 'ai' ? 'AI-Generated Analysis' :
+                   incident.diagnosis_source === 'reanalyzed' ? 'AI Re-analyzed' :
+                   'Heuristic Analysis'} & Root Cause
+                </p>
               </div>
             </div>
           </div>
@@ -448,6 +606,10 @@ export function IncidentView() {
             </div>
           </div>
         </div>
+      )}
+
+      {showNodeModal && (
+        <NodeModal nodeId={incident?.node_id} onClose={() => setShowNodeModal(false)} />
       )}
     </div>
   )

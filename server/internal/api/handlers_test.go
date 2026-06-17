@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ozyshield/ozyshield-server/internal/config"
 	"github.com/ozyshield/ozyshield-server/internal/db"
 	"github.com/ozyshield/ozyshield-server/internal/engine"
 )
@@ -15,7 +16,8 @@ import (
 func TestIngestTelemetry(t *testing.T) {
 	store := db.NewMemoryStore()
 	cache := engine.NewDiagnosticsCache()
-	serverAPI := NewServerAPI(store, cache)
+	cfg := &config.Config{AdminEmail: "test@test.com", AdminPassword: "pass", AuthToken: "token", JWTSecret: "secret"}
+	serverAPI := NewServerAPI(store, cache, cfg)
 
 	// Create test HTTP server ServeMux
 	mux := http.NewServeMux()

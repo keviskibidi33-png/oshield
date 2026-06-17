@@ -46,6 +46,7 @@ func main() {
 	}
 
 	serverAPI := api.NewServerAPI(store, cache, cfg)
+	serverAPI.StartUptimeRecorder()
 	mux := http.NewServeMux()
 	api.RegisterRoutes(mux, serverAPI)
 

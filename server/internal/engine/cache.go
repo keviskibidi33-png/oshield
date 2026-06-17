@@ -9,6 +9,7 @@ import (
 
 // CachedDiagnosis contains root cause analysis and remediation steps.
 type CachedDiagnosis struct {
+	Title string   `json:"title"`
 	Cause string   `json:"cause"`
 	Steps []string `json:"steps"`
 }

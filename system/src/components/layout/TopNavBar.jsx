@@ -86,11 +86,9 @@ export function TopNavBar() {
           <NavLink to="/teams" className={({ isActive }) =>
             `text-[14px] h-full flex items-center transition-colors ${isActive ? 'text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:text-on-surface'}`
           }>Teams</NavLink>
-          {isAdmin && (
-            <NavLink to="/settings" className={({ isActive }) =>
-              `text-[14px] h-full flex items-center transition-colors ${isActive ? 'text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:text-on-surface'}`
-            }>Settings</NavLink>
-          )}
+          <NavLink to="/settings" className={({ isActive }) =>
+            `text-[14px] h-full flex items-center transition-colors ${isActive ? 'text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:text-on-surface'}`
+          }>Settings</NavLink>
         </nav>
         <div className="flex items-center gap-2">
           <div ref={notifRef} className="relative">

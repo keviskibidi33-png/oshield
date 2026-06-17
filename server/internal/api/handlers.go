@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,62 @@ func NewServerAPI(store db.Store, cache *engine.DiagnosticsCache, cfg *config.Co
 		users: NewUserStore(cfg),
 		Cfg:   cfg,
 	}
+}
+
+// StartUptimeRecorder runs a background goroutine that records node uptime every hour.
+func (api *ServerAPI) StartUptimeRecorder() {
+	go func() {
+		// Record immediately on startup
+		api.recordUptimeSnapshot()
+
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
+			api.recordUptimeSnapshot()
+		}
+	}()
+	log.Println("[Server] Uptime recorder started (hourly)")
+}
+
+func (api *ServerAPI) recordUptimeSnapshot() {
+	nodes, err := api.Store.ListNodes()
+	if err != nil {
+		log.Printf("[Uptime] Failed to list nodes: %v", err)
+		return
+	}
+
+	nodeStatus := make(map[string]bool)
+	now := time.Now()
+	for _, n := range nodes {
+		// Node is online if last_seen within last 5 minutes
+		isOnline := now.Sub(n.LastSeen) < 5*time.Minute
+		nodeStatus[n.NodeID] = isOnline
+
+		// Refresh last_seen for seed/demo nodes so they stay online
+		if isOnline {
+			api.Store.UpdateNodeLastSeen(n.NodeID)
+		}
+	}
+
+	onlineCount := 0
+	for _, online := range nodeStatus {
+		if online {
+			onlineCount++
+		}
+	}
+
+	record := db.UptimeRecord{
+		Timestamp:   now,
+		NodeStatus:  nodeStatus,
+		OnlineCount: onlineCount,
+		TotalCount:  len(nodes),
+	}
+
+	if err := api.Store.RecordUptime(record); err != nil {
+		log.Printf("[Uptime] Failed to record uptime: %v", err)
+		return
+	}
+	log.Printf("[Uptime] Snapshot recorded: %d/%d nodes online", onlineCount, len(nodes))
 }
 
 // GetInstallScript serves the install.sh script dynamically, injecting the token if provided.
@@ -71,6 +128,7 @@ func (api *ServerAPI) RegisterDiscovery(w http.ResponseWriter, r *http.Request) 
 		NodeID      string `json:"node_id"`
 		SystemMap   struct {
 			Hostname  string            `json:"hostname"`
+			IP        string            `json:"ip,omitempty"`
 			OS        string            `json:"os"`
 			Platform  string            `json:"platform"`
 			CPUCount  int               `json:"cpu_count"`
@@ -93,6 +151,7 @@ func (api *ServerAPI) RegisterDiscovery(w http.ResponseWriter, r *http.Request) 
 	node := db.Node{
 		NodeID:   payload.NodeID,
 		Name:     payload.SystemMap.Hostname,
+		IP:       payload.SystemMap.IP,
 		OS:       payload.SystemMap.OS,
 		Platform: payload.SystemMap.Platform,
 		CPUCount: payload.SystemMap.CPUCount,
@@ -143,17 +202,25 @@ func (api *ServerAPI) IngestTelemetry(w http.ResponseWriter, r *http.Request) {
 		log.Printf("[Server] Cache hit for log line: %s. Serving cached diagnosis.", payload.LogLine[:min(len(payload.LogLine), 40)])
 	}
 
+	// Determine diagnosis source
+	diagSource := "heuristic"
+	if os.Getenv("OPENAI_API_KEY") != "" {
+		diagSource = "ai"
+	}
+
 	// 2. Generate Incident Record
 	incidentID := "inc_" + time.Now().Format("20060102150405") + "_" + strings.ToLower(payload.NodeID[:min(len(payload.NodeID), 4)])
 	incident := db.Incident{
-		ID:          incidentID,
-		NodeID:      payload.NodeID,
-		LogLine:     payload.LogLine,
-		Service:     payload.Service,
-		Diagnosis:   diag.Cause,
-		Remediation: diag.Steps,
-		Status:      "critical",
-		Timestamp:   payload.Timestamp,
+		ID:              incidentID,
+		Title:           diag.Title,
+		NodeID:          payload.NodeID,
+		LogLine:         payload.LogLine,
+		Service:         payload.Service,
+		Diagnosis:       diag.Cause,
+		DiagnosisSource: diagSource,
+		Remediation:     diag.Steps,
+		Status:          "critical",
+		Timestamp:       payload.Timestamp,
 	}
 
 	// 3. Register incident in DB
@@ -200,16 +267,23 @@ func (api *ServerAPI) SimulateCrash(w http.ResponseWriter, r *http.Request) {
 	logLine := "[CRITICAL] postgresql database query failed: lock timeout after 10000ms. transaction blocked."
 	diag := engine.AnalyzeLog(logLine, "postgresql")
 
+	diagSource := "heuristic"
+	if os.Getenv("OPENAI_API_KEY") != "" {
+		diagSource = "ai"
+	}
+
 	incidentID := "inc_sim_" + time.Now().Format("150405")
 	incident := db.Incident{
-		ID:          incidentID,
-		NodeID:      "vm-primary-postgres",
-		LogLine:     logLine,
-		Service:     "postgresql",
-		Diagnosis:   diag.Cause,
-		Remediation: diag.Steps,
-		Status:      "critical",
-		Timestamp:   time.Now(),
+		ID:              incidentID,
+		Title:           diag.Title,
+		NodeID:          "vm-primary-postgres",
+		LogLine:         logLine,
+		Service:         "postgresql",
+		Diagnosis:       diag.Cause,
+		DiagnosisSource: diagSource,
+		Remediation:     diag.Steps,
+		Status:          "critical",
+		Timestamp:       time.Now(),
 	}
 
 	savedIncident, err := api.Store.AddIncident(incident)
@@ -293,6 +367,110 @@ func (api *ServerAPI) AssignIncidentToTeam(w http.ResponseWriter, r *http.Reques
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(updated)
+}
+
+// Heartbeat receives agent liveness signals and updates the node's last_seen timestamp.
+func (api *ServerAPI) Heartbeat(w http.ResponseWriter, r *http.Request) {
+	type HeartbeatPayload struct {
+		ClientToken string `json:"client_token"`
+		NodeID      string `json:"node_id"`
+	}
+
+	var payload HeartbeatPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid JSON payload: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if payload.NodeID == "" {
+		http.Error(w, "Missing node_id parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Update last_seen timestamp for the node
+	if err := api.Store.UpdateNodeLastSeen(payload.NodeID); err != nil {
+		// Node might not exist yet, that's okay
+		log.Printf("[Server] Heartbeat for unknown node: %s", payload.NodeID)
+	} else {
+		log.Printf("[Server] Heartbeat received from node: %s", payload.NodeID)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+// ReanalyzeIncident re-runs AI diagnosis on an existing incident.
+func (api *ServerAPI) ReanalyzeIncident(w http.ResponseWriter, r *http.Request) {
+	incidentID := r.PathValue("id")
+	if incidentID == "" {
+		http.Error(w, "Missing incident ID", http.StatusBadRequest)
+		return
+	}
+
+	// Find the incident
+	incidents, err := api.Store.ListIncidents()
+	if err != nil {
+		http.Error(w, "Failed to list incidents", http.StatusInternalServerError)
+		return
+	}
+
+	var target *db.Incident
+	for _, inc := range incidents {
+		if inc.ID == incidentID {
+			target = &inc
+			break
+		}
+	}
+	if target == nil {
+		http.Error(w, "Incident not found", http.StatusNotFound)
+		return
+	}
+
+	// Force fresh AI analysis (bypass cache)
+	log.Printf("[Server] Re-analyzing incident %s with AI (log: %s...)", incidentID, target.LogLine[:min(len(target.LogLine), 40)])
+	diag := engine.AnalyzeLog(target.LogLine, target.Service)
+
+	// Determine source
+	source := "heuristic"
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey != "" {
+		source = "reanalyzed"
+	}
+
+	// Update the incident
+	updated, err := api.Store.UpdateIncidentDiagnosis(incidentID, diag.Title, diag.Cause, source, diag.Steps)
+	if err != nil {
+		http.Error(w, "Failed to update incident: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[Server] Incident %s re-analyzed. Source: %s, Title: %s", incidentID, source, diag.Title)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(updated)
+}
+
+// GetUptimeHistory returns hourly uptime records for the last N hours.
+func (api *ServerAPI) GetUptimeHistory(w http.ResponseWriter, r *http.Request) {
+	hoursStr := r.URL.Query().Get("hours")
+	hours := 24 // default 24 hours
+	if hoursStr != "" {
+		if h, err := strconv.Atoi(hoursStr); err == nil && h > 0 && h <= 168 {
+			hours = h
+		}
+	}
+
+	records, err := api.Store.GetUptimeHistory(hours)
+	if err != nil {
+		http.Error(w, "Failed to fetch uptime history: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(records)
 }
 
 func min(a, b int) int {

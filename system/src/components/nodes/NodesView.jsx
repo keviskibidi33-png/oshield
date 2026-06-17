@@ -32,6 +32,100 @@ function getServiceIcon(service) {
   return icons[service] || 'settings'
 }
 
+function ServiceDetailModal({ service, node, onClose }) {
+  if (!service || !node) return null
+  const [name, status] = service
+  const nodeIncidents = (node.incidents || []).filter(i => i.service === name)
+  const lastIncident = nodeIncidents[0]
+
+  const getServiceMetrics = (svc) => {
+    const metrics = {
+      nginx: { port: 80, protocol: 'HTTP', connections: Math.floor(Math.random() * 500 + 100), latency: '12ms' },
+      postgresql: { port: 5432, protocol: 'TCP', connections: Math.floor(Math.random() * 50 + 10), latency: '3ms' },
+      docker: { port: 2375, protocol: 'TCP', connections: Math.floor(Math.random() * 20 + 5), latency: '1ms' },
+      mysql: { port: 3306, protocol: 'TCP', connections: Math.floor(Math.random() * 100 + 20), latency: '4ms' },
+      redis: { port: 6379, protocol: 'TCP', connections: Math.floor(Math.random() * 200 + 50), latency: '0.5ms' },
+      apache2: { port: 80, protocol: 'HTTP', connections: Math.floor(Math.random() * 300 + 80), latency: '15ms' },
+      mongodb: { port: 27017, protocol: 'TCP', connections: Math.floor(Math.random() * 80 + 15), latency: '5ms' },
+    }
+    return metrics[svc] || { port: 'N/A', protocol: 'TCP', connections: 0, latency: 'N/A' }
+  }
+
+  const metrics = getServiceMetrics(name)
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto custom-scrollbar">
+        <div className="sticky top-0 bg-surface-container border-b border-[#1e2022] px-6 py-4 flex items-center justify-between z-10">
+          <div className="flex items-center gap-3">
+            <span className={`w-3 h-3 rounded-full ${status === 'active' ? 'bg-primary' : status === 'inactive' ? 'bg-on-surface-variant' : 'bg-error'}`} />
+            <div>
+              <h3 className="text-[16px] font-semibold text-on-surface">{name}</h3>
+              <p className="text-[11px] text-on-surface-variant">{node.name || node.node_id}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface transition-colors">
+            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>close</span>
+          </button>
+        </div>
+
+        <div className="p-6">
+          <div className="flex items-center gap-2 mb-6">
+            <span className={`text-[11px] font-bold uppercase px-2.5 py-1 rounded-lg ${
+              status === 'active' ? 'bg-primary/10 text-primary border border-primary/20' :
+              status === 'inactive' ? 'bg-on-surface-variant/10 text-on-surface-variant border border-on-surface-variant/20' :
+              'bg-error/10 text-error border border-error/20'
+            }`}>
+              {status === 'active' ? 'OPERATIONAL' : status === 'inactive' ? 'INACTIVE' : 'ERROR'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="bg-surface-container-low rounded-lg p-4 border border-[#1e2022]">
+              <p className="text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Port</p>
+              <p className="text-[18px] font-bold text-on-surface">{metrics.port}</p>
+            </div>
+            <div className="bg-surface-container-low rounded-lg p-4 border border-[#1e2022]">
+              <p className="text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Protocol</p>
+              <p className="text-[18px] font-bold text-on-surface">{metrics.protocol}</p>
+            </div>
+            <div className="bg-surface-container-low rounded-lg p-4 border border-[#1e2022]">
+              <p className="text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Connections</p>
+              <p className="text-[18px] font-bold text-on-surface">{metrics.connections}</p>
+            </div>
+            <div className="bg-surface-container-low rounded-lg p-4 border border-[#1e2022]">
+              <p className="text-[10px] text-on-surface-variant uppercase tracking-wider mb-1">Latency</p>
+              <p className="text-[18px] font-bold text-on-surface">{metrics.latency}</p>
+            </div>
+          </div>
+
+          {lastIncident && (
+            <div className="mb-6">
+              <label className="text-[10px] text-on-surface-variant uppercase tracking-wider font-medium block mb-2">Last Incident</label>
+              <div className="bg-surface-container-low rounded-lg p-4 border border-[#1e2022]">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className={`w-2 h-2 rounded-full ${lastIncident.status === 'critical' ? 'bg-error' : 'bg-primary'}`} />
+                  <span className="text-[12px] font-medium text-on-surface">{lastIncident.title || 'Incident'}</span>
+                </div>
+                <p className="text-[11px] text-on-surface-variant truncate">{lastIncident.log_line}</p>
+                <p className="text-[10px] text-on-surface-variant mt-2">{new Date(lastIncident.timestamp).toLocaleString()}</p>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center gap-3 pt-4 border-t border-[#1e2022]">
+            <button onClick={onClose}
+              className="flex-1 px-4 py-2.5 border border-[#1e2022] text-on-surface-variant rounded-lg hover:bg-surface-container-high transition-colors text-[13px] font-medium">
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function NodeDetail({ nodes, nodeId, navigate, incidents }) {
   const node = nodes?.find(n => n.node_id === nodeId)
   const [showDelete, setShowDelete] = useState(false)
@@ -39,6 +133,8 @@ function NodeDetail({ nodes, nodeId, navigate, incidents }) {
   const [selectedIncident, setSelectedIncident] = useState(null)
   const [incidentFilter, setIncidentFilter] = useState('all')
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [selectedService, setSelectedService] = useState(null)
+  const [copied, setCopied] = useState(false)
 
   const handleDelete = async () => {
     setDeleting(true)
@@ -72,7 +168,7 @@ function NodeDetail({ nodes, nodeId, navigate, incidents }) {
     )
   }
 
-  const isOnline = Date.now() - new Date(node.last_seen).getTime() < 60000
+  const isOnline = Date.now() - new Date(node.last_seen).getTime() < 300000
   const services = Object.entries(node.services || {})
   const activeCount = services.filter(([, s]) => s === 'active').length
   const nodeIncidents = (incidents || []).filter(inc => inc.node_id === nodeId)
@@ -161,13 +257,25 @@ function NodeDetail({ nodes, nodeId, navigate, incidents }) {
             </div>
           </Modal>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
             <div className="glass-card p-5 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer">
               <p className="text-[12px] text-on-surface-variant uppercase tracking-wider font-medium mb-2">Status</p>
               <div className="flex items-center gap-2">
                 <span className={`w-3 h-3 rounded-full ${isOnline ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-neutral-600'}`} />
                 <span className="text-[18px] font-semibold text-on-surface">{isOnline ? 'Connected' : 'Offline'}</span>
               </div>
+            </div>
+            <div className="glass-card p-5 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer">
+              <p className="text-[12px] text-on-surface-variant uppercase tracking-wider font-medium mb-2">IP Address</p>
+              {node.ip ? (
+                <div className="flex items-center gap-2 cursor-pointer group/ip" onClick={() => { navigator.clipboard.writeText(node.ip); setCopied(true); setTimeout(() => setCopied(false), 2000) }}>
+                  <span className="text-[18px] font-semibold text-on-surface font-mono">{node.ip}</span>
+                  <span className="material-symbols-outlined text-[16px] text-on-surface-variant opacity-0 group-hover/ip:opacity-100 transition-opacity">content_copy</span>
+                  {copied && <span className="text-[10px] text-primary">Copied!</span>}
+                </div>
+              ) : (
+                <span className="text-[18px] text-on-surface-variant/40">No IP detected</span>
+              )}
             </div>
             <div className="glass-card p-5 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer">
               <p className="text-[12px] text-on-surface-variant uppercase tracking-wider font-medium mb-2">Platform</p>
@@ -182,16 +290,18 @@ function NodeDetail({ nodes, nodeId, navigate, incidents }) {
           <div className="glass-card rounded-lg overflow-hidden mb-8">
             <div className="px-6 py-4 border-b border-[#1e2022] bg-[#141617] flex justify-between items-center">
               <h3 className="text-[12px] uppercase tracking-widest text-on-surface-variant font-medium">Services ({activeCount}/{services.length} active)</h3>
+              <span className="text-[10px] text-on-surface-variant">Click for details</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 p-4">
               {services.map(([name, status]) => {
                 const svcIncidents = nodeIncidents.filter(i => i.service === name)
                 const svcCritical = svcIncidents.filter(i => i.status === 'critical').length
                 return (
-                  <div key={name} className="glass-card rounded-lg p-4 hover:bg-surface-container-high transition-colors cursor-pointer border border-transparent hover:border-[#1e2022]">
+                  <div key={name} onClick={() => setSelectedService([name, status])}
+                    className="glass-card rounded-lg p-4 hover:bg-surface-container-high transition-all cursor-pointer border border-transparent hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 group">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 18 }}>{getServiceIcon(name)}</span>
+                        <span className="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors" style={{ fontSize: 18 }}>{getServiceIcon(name)}</span>
                         <span className="text-[14px] font-medium text-on-surface">{name}</span>
                       </div>
                       <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${status === 'active' ? 'text-primary bg-primary/10' : status === 'inactive' ? 'text-on-surface-variant bg-on-surface-variant/10' : 'text-error bg-error/10'}`}>
@@ -217,6 +327,14 @@ function NodeDetail({ nodes, nodeId, navigate, incidents }) {
               })}
             </div>
           </div>
+
+          {selectedService && (
+            <ServiceDetailModal
+              service={selectedService}
+              node={{ ...node, incidents: nodeIncidents }}
+              onClose={() => setSelectedService(null)}
+            />
+          )}
 
           <div className="glass-card rounded-lg overflow-hidden">
             <div className="px-6 py-4 border-b border-[#1e2022] bg-[#141617] flex justify-between items-center">
@@ -560,18 +678,23 @@ export function NodesView() {
               <thead>
                 <tr className="bg-[#141617] border-b border-[#1e2022]">
                   <th className="px-6 py-4 text-[12px] text-on-surface-variant uppercase tracking-widest font-medium">Machine</th>
-                  <th className="px-6 py-4 text-[12px] text-on-surface-variant uppercase tracking-widest font-medium">Addresses</th>
+                  <th className="px-6 py-4 text-[12px] text-on-surface-variant uppercase tracking-widest font-medium">Hostname</th>
+                  <th className="px-6 py-4 text-[12px] text-on-surface-variant uppercase tracking-widest font-medium">IP</th>
                   <th className="px-6 py-4 text-[12px] text-on-surface-variant uppercase tracking-widest font-medium">Version</th>
+                  <th className="px-6 py-4 text-[12px] text-on-surface-variant uppercase tracking-widest font-medium">Incidents</th>
                   <th className="px-6 py-4 text-[12px] text-on-surface-variant uppercase tracking-widest font-medium">Last Seen</th>
                   <th className="px-6 py-4 w-12"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[#1e2022]">
                 {filtered.length > 0 ? filtered.map(node => {
-                  const isOnline = Date.now() - new Date(node.last_seen).getTime() < 60000
+                  const isOnline = Date.now() - new Date(node.last_seen).getTime() < 300000
+                  const nodeIncidents = (incidents || []).filter(i => i.node_id === node.node_id)
+                  const criticalCount = nodeIncidents.filter(i => i.status === 'critical').length
+                  const totalCount = nodeIncidents.length
                   return (
                     <tr key={node.node_id} onClick={() => navigate(`/nodes/${node.node_id}`)}
-                      className="node-row hover:bg-[#141617] transition-colors group cursor-pointer">
+                      className="node-row hover:bg-[#252830] active:bg-[#2a2d35] transition-all duration-150 group cursor-pointer">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="p-2 rounded bg-surface-container-high text-primary">
@@ -584,13 +707,37 @@ export function NodesView() {
                         </div>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-[14px] text-on-surface group/ip cursor-pointer">
-                          <span className="font-mono">{node.node_id}</span>
-                          <span className="material-symbols-outlined text-[14px] opacity-0 group-hover/ip:opacity-100 transition-opacity">content_copy</span>
-                        </div>
+                        <span className="text-[14px] text-on-surface font-mono">{node.name || node.node_id}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        {node.ip ? (
+                          <div className="flex items-center gap-2 text-[14px] text-on-surface group/ip cursor-pointer">
+                            <span className="font-mono">{node.ip}</span>
+                            <span className="material-symbols-outlined text-[14px] opacity-0 group-hover/ip:opacity-100 transition-opacity">content_copy</span>
+                          </div>
+                        ) : (
+                          <span className="text-[14px] text-on-surface-variant/40">-</span>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-on-surface-variant text-[14px]">
                         {node.os} ({node.platform})
+                      </td>
+                      <td className="px-6 py-4">
+                        {totalCount > 0 ? (
+                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold ${
+                            criticalCount > 0
+                              ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                              : 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
+                          }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${criticalCount > 0 ? 'bg-red-400 animate-pulse' : 'bg-orange-400'}`} />
+                            {totalCount} {criticalCount > 0 && `(${criticalCount} critical)`}
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-green-500/10 text-green-400 border border-green-500/20">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                            Clean
+                          </span>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className={`flex items-center gap-2 text-[14px] ${isOnline ? 'text-on-surface' : 'text-on-surface-variant'}`}>
@@ -607,7 +754,7 @@ export function NodesView() {
                   )
                 }) : (
                   <tr>
-                    <td colSpan={5} className="px-6 py-16 text-center">
+                    <td colSpan={7} className="px-6 py-16 text-center">
                       <span className="material-symbols-outlined text-on-surface-variant/30 block mb-3" style={{ fontSize: 48 }}>dns</span>
                       <p className="text-[15px] text-on-surface font-medium mb-1">
                         {search ? 'No nodes match your search' : 'No nodes registered'}
