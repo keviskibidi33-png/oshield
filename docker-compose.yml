@@ -10,7 +10,7 @@ services:
     ports:
       - "7823:7823"
     environment:
-      - PORT=7823
+      - PORT=8080
       - OPENAI_API_KEY=${OPENAI_API_KEY} # Optional: passes host's OpenAI key
       - POSTGRES_USER=ozyshield
       - POSTGRES_PASSWORD=ozysecurepass
