@@ -5,7 +5,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -93,11 +92,7 @@ func (api *ServerAPI) recordUptimeSnapshot() {
 
 // GetInstallScript serves the install.sh script dynamically, injecting the token if provided.
 func (api *ServerAPI) GetInstallScript(w http.ResponseWriter, r *http.Request) {
-	// Look for install.sh in root folder, or one level up
 	installPath := "install.sh"
-	if _, err := os.Stat(installPath); os.IsNotExist(err) {
-		installPath = filepath.Join("..", "install.sh")
-	}
 
 	content, err := os.ReadFile(installPath)
 	if err != nil {
