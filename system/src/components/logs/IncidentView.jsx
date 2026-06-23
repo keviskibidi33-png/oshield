@@ -1,5 +1,6 @@
 import { useState, useCallback, useMemo, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import { usePolling } from '../../hooks/useApi'
 import { api } from '../../lib/api'
 
@@ -70,7 +71,7 @@ function NodeModal({ nodeId, onClose }) {
   const serviceEntries = Object.entries(node?.services || {})
   const activeCount = serviceEntries.filter(([, s]) => s === 'active').length
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={onClose}>
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
       <div className="relative bg-surface-container border border-[#1e2022] rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto custom-scrollbar"
@@ -167,7 +168,8 @@ function NodeModal({ nodeId, onClose }) {
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -607,7 +609,7 @@ export function IncidentView() {
         </div>
       </div>
 
-      {showTeamModal && (
+      {showTeamModal && createPortal(
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={() => setShowTeamModal(false)} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-md mx-4 p-6">
@@ -637,7 +639,8 @@ export function IncidentView() {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {showNodeModal && (

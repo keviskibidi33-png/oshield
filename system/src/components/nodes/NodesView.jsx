@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { usePolling } from '../../hooks/useApi'
 import { api } from '../../lib/api'
 import { Modal } from '../shared/Modal'
+import { createPortal } from 'react-dom'
 import { DeployAgentModal } from '../shared/DeployAgentModal'
 
 function timeAgo(d) {
@@ -53,7 +54,7 @@ function ServiceDetailModal({ service, node, onClose }) {
 
   const metrics = getServiceMetrics(name)
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
       <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto custom-scrollbar">
@@ -122,7 +123,8 @@ function ServiceDetailModal({ service, node, onClose }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -399,7 +401,7 @@ function NodeDetail({ nodes, nodeId, navigate, incidents }) {
         </div>
       </main>
 
-      {selectedIncident && (
+      {selectedIncident && createPortal(
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={() => setSelectedIncident(null)} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-2xl mx-4 max-h-[85vh] overflow-y-auto custom-scrollbar">
@@ -529,7 +531,8 @@ function NodeDetail({ nodes, nodeId, navigate, incidents }) {
               </div>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

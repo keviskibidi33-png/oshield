@@ -3,6 +3,7 @@ import { usePolling } from '../../hooks/useApi'
 import { api } from '../../lib/api'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
+import { createPortal } from 'react-dom'
 import { useNotifications } from '../../contexts/NotificationContext'
 
 function timeAgo(d) {
@@ -323,7 +324,7 @@ function TeamDetail({ teamId }) {
         </div>
       </div>
 
-      {showInvite && (
+      {showInvite && createPortal(
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={() => { setShowInvite(false); setInviteEmail('') }} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-md mx-4 p-6">
@@ -352,9 +353,9 @@ function TeamDetail({ teamId }) {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
-      {showAddMember && (
+      {showAddMember && createPortal(
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={() => { setShowAddMember(false); setSelectedUser('') }} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-md mx-4 p-6">
@@ -386,7 +387,7 @@ function TeamDetail({ teamId }) {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   )
 }
@@ -743,7 +744,7 @@ export function TeamsView() {
         </div>
       )}
 
-      {(showCreate || editingTeam) && (
+      {(showCreate || editingTeam) && createPortal(
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={closeTeamModal} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-md mx-4 p-6">
@@ -788,9 +789,9 @@ export function TeamsView() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
-      {deletingTeam && (
+      {deletingTeam && createPortal(
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={() => setDeletingTeam(null)} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-sm mx-4 p-6">
@@ -817,9 +818,9 @@ export function TeamsView() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
-      {(showCreateUser || editingUser) && (
+      {(showCreateUser || editingUser) && createPortal(
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={closeUserModal} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-md mx-4 p-6">
@@ -879,9 +880,9 @@ export function TeamsView() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
 
-      {deletingUser && (
+      {deletingUser && createPortal(
         <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={() => setDeletingUser(null)} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-sm mx-4 p-6">
@@ -908,7 +909,7 @@ export function TeamsView() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </div>
   )
 }

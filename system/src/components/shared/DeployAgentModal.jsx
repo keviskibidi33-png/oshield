@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 export function DeployAgentModal({ open, onClose }) {
   const [os, setOs] = useState('linux')
@@ -80,7 +81,7 @@ export function DeployAgentModal({ open, onClose }) {
     }
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
       <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-lg mx-4 p-6">
@@ -188,6 +189,7 @@ export function DeployAgentModal({ open, onClose }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
