@@ -105,6 +105,9 @@ func main() {
 				// 2. Perform zero-knowledge sanitization on the raw log
 				sanitized := filter.Sanitize(line.Content)
 
+				// 3. Detect suspicious patterns
+				suspiciousMatches := filter.DetectSuspiciousPatterns(line.Content)
+
 				// Determine matching service source based on log path
 				svc := "system"
 				for _, s := range []string{"nginx", "postgresql", "docker", "mysql", "redis", "mongodb"} {
@@ -116,13 +119,14 @@ func main() {
 
 				log.Printf("[Ingest] Incident detected: %s (Redacted & reporting...)", line.Content[:min(len(line.Content), 50)])
 
-				// 3. Dispatch telemetry report via HTTPS
+				// 4. Dispatch telemetry report via HTTPS
 				payload := client.TelemetryPayload{
-					ClientToken: cfg.ClientToken,
-					NodeID:      cfg.NodeID,
-					LogLine:     sanitized,
-					Service:     svc,
-					Timestamp:   line.Timestamp,
+					ClientToken:        cfg.ClientToken,
+					NodeID:             cfg.NodeID,
+					LogLine:            sanitized,
+					Service:            svc,
+					Timestamp:          line.Timestamp,
+					SuspiciousPatterns: suspiciousMatches,
 				}
 
 				go func(p client.TelemetryPayload) {
@@ -131,6 +135,28 @@ func main() {
 						log.Printf("[Error] Failed to report telemetry: %v", postErr)
 					}
 				}(payload)
+
+				// 5. Report suspicious patterns as separate alerts
+				if len(suspiciousMatches) > 0 {
+					for _, match := range suspiciousMatches {
+						log.Printf("[ALERT] Suspicious pattern detected: %s (%s)", match.Name, match.Category)
+						alertPayload := client.AlertPayload{
+							ClientToken: cfg.ClientToken,
+							NodeID:      cfg.NodeID,
+							Pattern:     match.Name,
+							Category:    match.Category,
+							Severity:    match.Severity,
+							LogLine:     sanitized,
+							Service:     svc,
+							Timestamp:   line.Timestamp,
+						}
+						go func(a client.AlertPayload) {
+							if alertErr := client.ReportAlert(ctx, cfg.ServerURL, a); alertErr != nil {
+								log.Printf("[Error] Failed to report alert: %v", alertErr)
+							}
+						}(alertPayload)
+					}
+				}
 			}
 		}
 	}

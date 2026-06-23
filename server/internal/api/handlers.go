@@ -203,7 +203,27 @@ func (api *ServerAPI) IngestTelemetry(w http.ResponseWriter, r *http.Request) {
 		diagSource = "ai"
 	}
 
-	// 2. Generate Incident Record
+	// 2. Calculate log hash for reoccurrence detection
+	logHash := engine.HashLogLine(payload.LogLine)
+
+	// 3. Check for reoccurrence within configured window
+	window := time.Duration(api.Cfg.ReoccurrenceWindowMin) * time.Minute
+	existing, err := api.Store.FindResolvedIncidentByHash(logHash, window)
+	if err == nil && existing != nil {
+		// Reopen the existing incident
+		log.Printf("[Server] Reoccurrence detected! Reopening incident %s (hash match)", existing.ID)
+		reopened, reopenErr := api.Store.ReopenIncident(existing.ID)
+		if reopenErr != nil {
+			log.Printf("[Server] Failed to reopen incident: %v", reopenErr)
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusAccepted)
+			json.NewEncoder(w).Encode(reopened)
+			return
+		}
+	}
+
+	// 4. No reoccurrence found - create new incident
 	incidentID := "inc_" + time.Now().Format("20060102150405") + "_" + strings.ToLower(payload.NodeID[:min(len(payload.NodeID), 4)])
 	incident := db.Incident{
 		ID:              incidentID,
@@ -216,9 +236,10 @@ func (api *ServerAPI) IngestTelemetry(w http.ResponseWriter, r *http.Request) {
 		Remediation:     diag.Steps,
 		Status:          "critical",
 		Timestamp:       payload.Timestamp,
+		LogHash:         logHash,
 	}
 
-	// 3. Register incident in DB
+	// 5. Register incident in DB
 	savedIncident, err := api.Store.AddIncident(incident)
 	if err != nil {
 		http.Error(w, "Failed to save incident: "+err.Error(), http.StatusInternalServerError)
@@ -267,6 +288,7 @@ func (api *ServerAPI) SimulateCrash(w http.ResponseWriter, r *http.Request) {
 		diagSource = "ai"
 	}
 
+	logHash := engine.HashLogLine(logLine)
 	incidentID := "inc_sim_" + time.Now().Format("150405")
 	incident := db.Incident{
 		ID:              incidentID,
@@ -279,6 +301,7 @@ func (api *ServerAPI) SimulateCrash(w http.ResponseWriter, r *http.Request) {
 		Remediation:     diag.Steps,
 		Status:          "critical",
 		Timestamp:       time.Now(),
+		LogHash:         logHash,
 	}
 
 	savedIncident, err := api.Store.AddIncident(incident)
@@ -473,4 +496,63 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// IngestAlert receives suspicious pattern alerts from agents.
+func (api *ServerAPI) IngestAlert(w http.ResponseWriter, r *http.Request) {
+	type AlertPayload struct {
+		ClientToken string    `json:"client_token"`
+		NodeID      string    `json:"node_id"`
+		Pattern     string    `json:"pattern"`
+		Category    string    `json:"category"`
+		Severity    string    `json:"severity"`
+		LogLine     string    `json:"log_line"`
+		Service     string    `json:"service"`
+		Timestamp   time.Time `json:"timestamp"`
+	}
+
+	var payload AlertPayload
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		http.Error(w, "Invalid JSON payload: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	if payload.NodeID == "" || payload.Pattern == "" {
+		http.Error(w, "Missing node_id or pattern parameters", http.StatusBadRequest)
+		return
+	}
+
+	alert := db.Alert{
+		NodeID:    payload.NodeID,
+		Pattern:   payload.Pattern,
+		Category:  payload.Category,
+		Severity:  payload.Severity,
+		LogLine:   payload.LogLine,
+		Service:   payload.Service,
+		Timestamp: payload.Timestamp,
+	}
+
+	savedAlert, err := api.Store.AddAlert(alert)
+	if err != nil {
+		http.Error(w, "Failed to save alert: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("[Server] Suspicious pattern alert received: %s from node %s", payload.Pattern, payload.NodeID)
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(savedAlert)
+}
+
+// ListAlerts serves a list of all suspicious pattern alerts.
+func (api *ServerAPI) ListAlerts(w http.ResponseWriter, r *http.Request) {
+	alerts, err := api.Store.ListAlerts()
+	if err != nil {
+		http.Error(w, "Failed to list alerts: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(alerts)
 }

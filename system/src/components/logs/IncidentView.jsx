@@ -48,12 +48,14 @@ function NodeModal({ nodeId, onClose }) {
 
   useEffect(() => {
     if (!nodeId) return
+    document.body.style.overflow = 'hidden'
     setLoading(true)
     api.get('/nodes').then(nodes => {
       const found = nodes?.find(n => n.node_id === nodeId)
       setNode(found || null)
       setLoading(false)
     }).catch(() => setLoading(false))
+    return () => { document.body.style.overflow = '' }
   }, [nodeId])
 
   useEffect(() => {
@@ -69,8 +71,8 @@ function NodeModal({ nodeId, onClose }) {
   const activeCount = serviceEntries.filter(([, s]) => s === 'active').length
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
       <div className="relative bg-surface-container border border-[#1e2022] rounded-2xl shadow-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto custom-scrollbar"
         onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between p-5 border-b border-[#1e2022]">
@@ -184,6 +186,15 @@ export function IncidentView() {
   const { data: teamData } = usePolling(fetchTeams, 10000)
 
   useEffect(() => { if (teamData) setTeams(teamData) }, [teamData])
+
+  useEffect(() => {
+    if (showTeamModal || showNodeModal) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [showTeamModal, showNodeModal])
 
   const incident = useMemo(() => {
     if (!incidents || !incidentId) return null
@@ -308,6 +319,12 @@ export function IncidentView() {
               {incident.title || 'Incident'}
               <span className="text-on-surface-variant text-[18px] font-normal ml-2">#{incident.id.replace('inc_', '')}</span>
             </h1>
+            {incident.reopened_count > 0 && (
+              <span className="px-3 py-1 rounded-lg text-[12px] font-bold bg-tertiary/10 text-tertiary border border-tertiary/20 flex items-center gap-1.5">
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>replay</span>
+                Reopened ×{incident.reopened_count}
+              </span>
+            )}
             <div className={`px-3 py-1 rounded-lg text-[12px] font-bold uppercase tracking-wider border flex items-center gap-1.5 ${sc.bg}`}>
               <span className="material-symbols-outlined" style={{ fontSize: 14 }}>{sc.icon}</span>
               {sc.label}
@@ -525,6 +542,21 @@ export function IncidentView() {
                     <p className="text-[12px] text-on-surface-variant">System — {timeAgo(incident.timestamp)}</p>
                   </div>
                 </div>
+                {incident.reopened_count > 0 && (
+                  <div className="flex gap-4 relative">
+                    <div className="w-6 h-6 rounded-full bg-tertiary-container border border-[#1e2022] flex items-center justify-center z-10">
+                      <span className="material-symbols-outlined" style={{ fontSize: 14 }}>replay</span>
+                    </div>
+                    <div className="flex-grow">
+                      <p className="text-[14px] font-medium text-on-surface">
+                        Reopened <span className="text-tertiary font-bold">×{incident.reopened_count}</span>
+                      </p>
+                      <p className="text-[12px] text-on-surface-variant">
+                        {incident.last_reopened_at ? timeAgo(incident.last_reopened_at) : 'Recently'}
+                      </p>
+                    </div>
+                  </div>
+                )}
                 {(incident.status === 'acknowledged' || incident.status === 'resolved') && (
                   <div className="flex gap-4 relative">
                     <div className="w-6 h-6 rounded-full bg-tertiary-container border border-[#1e2022] flex items-center justify-center z-10">
@@ -576,7 +608,7 @@ export function IncidentView() {
       </div>
 
       {showTeamModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={() => setShowTeamModal(false)} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-md mx-4 p-6">
             <div className="flex items-center justify-between mb-4">

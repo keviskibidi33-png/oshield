@@ -27,6 +27,7 @@ export function SettingsView() {
     enableRegister: false,
     seedData: false,
     defaultRole: 'member',
+    reoccurrenceWindowMin: 1,
   })
 
   const [authConfig, setAuthConfig] = useState({
@@ -171,6 +172,42 @@ export function SettingsView() {
                       <p className="text-[14px] text-on-surface-variant">Load sample nodes and incidents on next startup.</p>
                     </div>
                     <Toggle enabled={serverConfig.seedData} onChange={() => setServerConfig(prev => ({ ...prev, seedData: !prev.seedData }))} />
+                  </div>
+                </div>
+              </section>
+
+              <section className="bg-surface-container border border-[#1e2022]/30 rounded-xl overflow-hidden shadow-sm">
+                <div className="p-6 border-b border-[#1e2022]/30 bg-surface-container-low flex justify-between items-center">
+                  <div>
+                    <h3 className="text-[20px] font-semibold text-on-surface">Incident Management</h3>
+                    <p className="text-[12px] text-on-surface-variant">Configure reoccurrence detection behavior.</p>
+                  </div>
+                  <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>replay</span>
+                </div>
+                <div className="p-6 space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-surface-container-low rounded-lg border border-[#1e2022]/20">
+                    <div className="space-y-1">
+                      <h4 className="text-[16px] text-on-surface font-semibold">Reoccurrence Window</h4>
+                      <p className="text-[14px] text-on-surface-variant">If the same error occurs within this window after resolution, the incident is reopened instead of creating a new one.</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="1"
+                        max="60"
+                        value={serverConfig.reoccurrenceWindowMin}
+                        onChange={(e) => setServerConfig(prev => ({ ...prev, reoccurrenceWindowMin: parseInt(e.target.value) || 1 }))}
+                        className="w-20 bg-background border border-[#1e2022] text-on-surface rounded-lg px-3 py-2 text-[14px] text-center focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all"
+                      />
+                      <span className="text-[13px] text-on-surface-variant">min</span>
+                    </div>
+                  </div>
+                  <div className="p-4 bg-primary-container/10 border border-primary-container/20 rounded-lg flex gap-3 items-start">
+                    <span className="material-symbols-outlined text-primary" style={{ fontSize: 20 }}>info</span>
+                    <div>
+                      <p className="text-[13px] text-primary font-semibold">How it works</p>
+                      <p className="text-[12px] text-on-surface-variant">When an error matches a resolved incident's log signature within this time window, the original incident is reopened with a "Reopened" badge instead of creating a duplicate.</p>
+                    </div>
                   </div>
                 </div>
               </section>

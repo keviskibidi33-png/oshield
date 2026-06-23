@@ -79,14 +79,7 @@ export function LogsView() {
   const navigate = useNavigate()
 
   const fetchIncidents = useCallback(() => api.get('/incidents'), [])
-  const fetchNodes = useCallback(() => api.get('/nodes'), [])
   const { data: incidents, loading, error } = usePolling(fetchIncidents, liveStream ? 3000 : 10000)
-  const { data: nodes } = usePolling(fetchNodes, 5000)
-
-  const nodeMap = useMemo(() => {
-    if (!nodes) return {}
-    return nodes.reduce((acc, n) => { acc[n.node_id] = n; return acc }, {})
-  }, [nodes])
 
   const filtered = useMemo(() => {
     return (incidents || []).filter(inc => {
@@ -136,13 +129,14 @@ export function LogsView() {
     setExporting(true)
     try {
       const csv = [
-        'Timestamp,Node,Source IP,Event Type,Severity,Message',
+        'Timestamp,Node,Event Type,Severity,Threat,Assigned Team,Message',
         ...filtered.map(inc => [
           inc.timestamp,
           inc.node_id,
-          nodeMap[inc.node_id]?.ip || '-',
           (inc.service || 'SYS_MON').toUpperCase(),
           inc.status,
+          inc.suspicious_patterns?.length || 0,
+          inc.assigned_team || 'Unassigned',
           '"' + (inc.log_line || '').replace(/"/g, '""') + '"',
         ].join(','))
       ].join('\n')
@@ -294,37 +288,65 @@ export function LogsView() {
 
       <div className="glass-card rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+          <table className="w-full text-left border-collapse table-fixed">
             <thead>
               <tr className="text-on-surface-variant border-b border-[#1e2022] bg-[#141617]">
-                <th className="px-6 py-3 text-[11px] uppercase tracking-wider font-medium w-40">Timestamp</th>
-                <th className="px-6 py-3 text-[11px] uppercase tracking-wider font-medium">Node Name</th>
-                <th className="px-6 py-3 text-[11px] uppercase tracking-wider font-medium">Source IP</th>
-                <th className="px-6 py-3 text-[11px] uppercase tracking-wider font-medium">Event Type</th>
-                <th className="px-6 py-3 text-[11px] uppercase tracking-wider font-medium">Severity</th>
-                <th className="px-6 py-3 text-[11px] uppercase tracking-wider font-medium">Message</th>
+                <th className="px-3 py-3 text-[10px] uppercase tracking-wider font-medium w-[140px]">Timestamp</th>
+                <th className="px-3 py-3 text-[10px] uppercase tracking-wider font-medium w-[120px]">Node</th>
+                <th className="px-3 py-3 text-[10px] uppercase tracking-wider font-medium w-[80px]">Type</th>
+                <th className="px-3 py-3 text-[10px] uppercase tracking-wider font-medium w-[90px]">Severity</th>
+                <th className="px-3 py-3 text-[10px] uppercase tracking-wider font-medium w-[70px]">Threat</th>
+                <th className="px-3 py-3 text-[10px] uppercase tracking-wider font-medium w-[100px]">Team</th>
+                <th className="px-3 py-3 text-[10px] uppercase tracking-wider font-medium">Message</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[#1e2022]">
               {paginated.map((inc) => {
-                const sourceIP = nodeMap[inc.node_id]?.ip || '-'
                 const eventType = (inc.service || 'SYS_MON').toUpperCase().replace(/[^A-Z_]/g, '').slice(0, 8) || 'SYS_MON'
                 return (
                   <tr key={inc.id} onClick={() => navigate('/incidents/' + inc.id)}
                     className="hover:bg-[#141617] cursor-pointer transition-colors">
-                    <td className="px-6 py-4 text-[12px] text-on-surface-variant font-mono">
-                      {new Date(inc.timestamp).toLocaleString('sv-SE', { hour12: false }).replace('T', ' ')}
+                    <td className="px-3 py-3 text-[11px] text-on-surface-variant font-mono whitespace-nowrap">
+                      {new Date(inc.timestamp).toLocaleString('sv-SE', { hour12: false }).replace('T', ' ').slice(5, 16)}
                     </td>
-                    <td className="px-6 py-4">
-                      <span className="text-[13px] text-primary font-medium hover:underline">{inc.node_id}</span>
+                    <td className="px-3 py-3">
+                      <span className="text-[12px] text-primary font-medium hover:underline truncate block">{inc.node_id}</span>
                     </td>
-                    <td className="px-6 py-4 text-[13px] text-on-surface-variant font-mono">{sourceIP}</td>
-                    <td className="px-6 py-4"><EventTypeBadge type={eventType} /></td>
-                    <td className="px-6 py-4"><SeverityBadge severity={inc.status} /></td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col">
-                        <span className="text-[13px] text-on-surface font-medium truncate block max-w-md">{inc.title || inc.log_line}</span>
-                        {inc.title && <span className="text-[11px] text-on-surface-variant truncate block max-w-md">{inc.log_line}</span>}
+                    <td className="px-3 py-3"><EventTypeBadge type={eventType} /></td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-1">
+                        <SeverityBadge severity={inc.status} />
+                        {inc.reopened_count > 0 && (
+                          <span className="text-[8px] text-tertiary font-bold bg-tertiary/10 px-1 py-0.5 rounded border border-tertiary/20 whitespace-nowrap">
+                            ×{inc.reopened_count}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-3 py-3">
+                      {inc.suspicious_patterns?.length > 0 ? (
+                        <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-tertiary/10 text-tertiary text-[9px] font-bold border border-tertiary/20">
+                          <span className="material-symbols-outlined" style={{ fontSize: 10 }}>warning</span>
+                          {inc.suspicious_patterns.length}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-on-surface-variant/30">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
+                      {inc.assigned_team ? (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-primary/10 text-primary text-[10px] font-medium truncate">
+                          <span className="material-symbols-outlined" style={{ fontSize: 10 }}>group</span>
+                          {inc.assigned_team}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-on-surface-variant/30 italic">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[12px] text-on-surface font-medium truncate">{inc.title || inc.log_line}</span>
+                        {inc.title && <span className="text-[10px] text-on-surface-variant truncate">{inc.log_line}</span>}
                       </div>
                     </td>
                   </tr>
@@ -332,7 +354,7 @@ export function LogsView() {
               })}
               {paginated.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-6 py-16 text-center text-on-surface-variant text-[14px]">
+                  <td colSpan={7} className="px-3 py-16 text-center text-on-surface-variant text-[14px]">
                     <span className="material-symbols-outlined block mb-2" style={{ fontSize: 32 }}>search_off</span>
                     No logs found matching your filters
                   </td>

@@ -11,6 +11,7 @@ func RegisterRoutes(mux *http.ServeMux, api *ServerAPI) {
 	mux.HandleFunc("POST /v1/discovery", corsMiddleware(api.RegisterDiscovery))
 	mux.HandleFunc("POST /v1/telemetry", corsMiddleware(api.IngestTelemetry))
 	mux.HandleFunc("POST /v1/heartbeat", corsMiddleware(api.Heartbeat))
+	mux.HandleFunc("POST /v1/alerts", corsMiddleware(api.IngestAlert))
 
 	// 2. Client Dashboard-facing endpoints
 	mux.HandleFunc("GET /v1/nodes", corsMiddleware(api.ListNodes))
@@ -20,6 +21,7 @@ func RegisterRoutes(mux *http.ServeMux, api *ServerAPI) {
 	mux.HandleFunc("POST /v1/incidents/{id}/reanalyze", corsMiddleware(api.ReanalyzeIncident))
 	mux.HandleFunc("POST /v1/simulate-crash", corsMiddleware(api.SimulateCrash))
 	mux.HandleFunc("GET /v1/uptime", corsMiddleware(api.GetUptimeHistory))
+	mux.HandleFunc("GET /v1/alerts", corsMiddleware(api.ListAlerts))
 
 	// 3. Teams endpoints
 	mux.HandleFunc("GET /v1/teams", corsMiddleware(api.ListTeams))

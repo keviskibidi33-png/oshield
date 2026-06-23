@@ -9,18 +9,23 @@ export function DeployAgentModal({ open, onClose }) {
   const [tokenCopied, setTokenCopied] = useState(false)
 
   useEffect(() => {
-    if (!open) return
-    setCopied(false)
-    setTokenCopied(false)
-    setTokenStatus('loading')
+    if (open) {
+      document.body.style.overflow = 'hidden'
+      setCopied(false)
+      setTokenCopied(false)
+      setTokenStatus('loading')
 
-    const storedToken = localStorage.getItem('ozyshield_token')
-    if (storedToken) {
-      setToken(storedToken)
-      setTokenStatus('ready')
+      const storedToken = localStorage.getItem('ozyshield_token')
+      if (storedToken) {
+        setToken(storedToken)
+        setTokenStatus('ready')
+      } else {
+        setTokenStatus('error')
+      }
     } else {
-      setTokenStatus('error')
+      document.body.style.overflow = ''
     }
+    return () => { document.body.style.overflow = '' }
   }, [open])
 
   const fetchToken = () => {
@@ -76,7 +81,7 @@ export function DeployAgentModal({ open, onClose }) {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
       <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-lg mx-4 p-6">
         <div className="flex items-center justify-between mb-5">

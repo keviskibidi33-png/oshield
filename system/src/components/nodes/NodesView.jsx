@@ -54,7 +54,7 @@ function ServiceDetailModal({ service, node, onClose }) {
   const metrics = getServiceMetrics(name)
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
       <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-lg mx-4 max-h-[85vh] overflow-y-auto custom-scrollbar">
         <div className="sticky top-0 bg-surface-container border-b border-[#1e2022] px-6 py-4 flex items-center justify-between z-10">
@@ -400,7 +400,7 @@ function NodeDetail({ nodes, nodeId, navigate, incidents }) {
       </main>
 
       {selectedIncident && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={() => setSelectedIncident(null)} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-2xl mx-4 max-h-[85vh] overflow-y-auto custom-scrollbar">
             <div className="sticky top-0 bg-surface-container border-b border-[#1e2022] px-6 py-4 flex items-center justify-between z-10">

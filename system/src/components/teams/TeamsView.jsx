@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { usePolling } from '../../hooks/useApi'
 import { api } from '../../lib/api'
 import { useNavigate, useParams } from 'react-router-dom'
@@ -26,6 +26,17 @@ function TeamDetail({ teamId }) {
   const [inviteEmail, setInviteEmail] = useState('')
   const [showAddMember, setShowAddMember] = useState(false)
   const [selectedUser, setSelectedUser] = useState('')
+
+  const anyModalOpen = showInvite || showAddMember
+
+  useEffect(() => {
+    if (anyModalOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [anyModalOpen])
 
   const fetchTeams = useCallback(() => api.get('/teams'), [])
   const fetchIncidents = useCallback(() => api.get('/incidents'), [])
@@ -313,7 +324,7 @@ function TeamDetail({ teamId }) {
       </div>
 
       {showInvite && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={() => { setShowInvite(false); setInviteEmail('') }} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-md mx-4 p-6">
             <div className="flex items-center justify-between mb-4">
@@ -344,7 +355,7 @@ function TeamDetail({ teamId }) {
       )}
 
       {showAddMember && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={() => { setShowAddMember(false); setSelectedUser('') }} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-md mx-4 p-6">
             <div className="flex items-center justify-between mb-4">
@@ -396,6 +407,17 @@ export function TeamsView() {
   const [userForm, setUserForm] = useState({ name: '', email: '', role: 'member', teams: [] })
   const [editingUser, setEditingUser] = useState(null)
   const [deletingUser, setDeletingUser] = useState(null)
+
+  const anyModalOpen = showCreate || editingTeam || deletingTeam || showCreateUser || editingUser || deletingUser
+
+  useEffect(() => {
+    if (anyModalOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [anyModalOpen])
 
   const fetchTeams = useCallback(() => api.get('/teams'), [])
   const fetchUsers = useCallback(() => api.get('/users'), [])
@@ -722,7 +744,7 @@ export function TeamsView() {
       )}
 
       {(showCreate || editingTeam) && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={closeTeamModal} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-md mx-4 p-6">
             <div className="flex items-center justify-between mb-4">
@@ -769,7 +791,7 @@ export function TeamsView() {
       )}
 
       {deletingTeam && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={() => setDeletingTeam(null)} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-sm mx-4 p-6">
             <div className="flex items-center gap-4 mb-5">
@@ -798,7 +820,7 @@ export function TeamsView() {
       )}
 
       {(showCreateUser || editingUser) && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={closeUserModal} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-md mx-4 p-6">
             <div className="flex items-center justify-between mb-4">
@@ -860,7 +882,7 @@ export function TeamsView() {
       )}
 
       {deletingUser && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center">
           <div className="absolute inset-0 bg-black/70" onClick={() => setDeletingUser(null)} />
           <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-sm mx-4 p-6">
             <div className="flex items-center gap-4 mb-5">

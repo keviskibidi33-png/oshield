@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { TopNavBar } from './components/layout/TopNavBar'
 import { LoginView } from './components/login/LoginView'
 import { DashboardView } from './components/dashboard/DashboardView'
@@ -21,6 +21,24 @@ function ProtectedRoute({ children }) {
   return children
 }
 
+function AnimatedRoutes() {
+  const location = useLocation()
+  return (
+    <div key={location.pathname} className="page-enter">
+      <Routes location={location}>
+        <Route path="/" element={<div className="max-w-[1280px] mx-auto px-8 pt-8 pb-12 bg-surface-dim min-h-full"><DashboardView /></div>} />
+        <Route path="/nodes" element={<NodesView />} />
+        <Route path="/nodes/:id" element={<NodesView />} />
+        <Route path="/logs" element={<div className="max-w-[1280px] mx-auto px-8 pt-8 bg-surface-dim min-h-full"><LogsView /></div>} />
+        <Route path="/incidents/:id" element={<div className="max-w-[1280px] mx-auto px-8 pt-8 bg-surface-dim min-h-full"><IncidentView /></div>} />
+        <Route path="/teams" element={<div className="bg-surface-dim min-h-full"><TeamsView /></div>} />
+        <Route path="/teams/:id" element={<div className="bg-surface-dim min-h-full"><TeamsView /></div>} />
+        <Route path="/settings" element={<SettingsView />} />
+      </Routes>
+    </div>
+  )
+}
+
 export default function App() {
   return (
     <BrowserRouter>
@@ -33,16 +51,7 @@ export default function App() {
                 <div className="min-h-screen bg-background text-on-surface flex flex-col">
                   <TopNavBar />
                   <main className="flex-1 pt-16 w-full bg-background">
-                    <Routes>
-                      <Route path="/" element={<div className="max-w-[1280px] mx-auto px-8 pt-8 pb-12 bg-surface-dim min-h-full"><DashboardView /></div>} />
-                      <Route path="/nodes" element={<NodesView />} />
-                      <Route path="/nodes/:id" element={<NodesView />} />
-                      <Route path="/logs" element={<div className="max-w-[1280px] mx-auto px-8 pt-8 bg-surface-dim min-h-full"><LogsView /></div>} />
-                      <Route path="/incidents/:id" element={<div className="max-w-[1280px] mx-auto px-8 pt-8 bg-surface-dim min-h-full"><IncidentView /></div>} />
-                      <Route path="/teams" element={<div className="bg-surface-dim min-h-full"><TeamsView /></div>} />
-                      <Route path="/teams/:id" element={<div className="bg-surface-dim min-h-full"><TeamsView /></div>} />
-                      <Route path="/settings" element={<SettingsView />} />
-                    </Routes>
+                    <AnimatedRoutes />
                   </main>
                 </div>
               </ProtectedRoute>

@@ -69,10 +69,10 @@ export function TopNavBar() {
   return (
     <header className="bg-surface-container-lowest border-b border-[#1e2022] fixed top-0 z-50 w-full">
       <div className="flex items-center justify-between px-8 h-16 max-w-[1280px] mx-auto">
-        <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-primary" style={{ fontVariationSettings: "'FILL' 1" }}>security</span>
-          <span className="text-[20px] font-bold text-on-surface-variant tracking-tight">OzyShield</span>
-        </div>
+        <NavLink to="/" className="flex items-center gap-2 cursor-pointer select-none group">
+          <span className="material-symbols-outlined text-primary transition-transform duration-200 group-hover:scale-125" style={{ fontVariationSettings: "'FILL' 1" }}>security</span>
+          <span className="text-[20px] font-bold text-on-surface-variant tracking-tight transition-transform duration-200 group-hover:scale-110">OzyShield</span>
+        </NavLink>
         <nav className="hidden md:flex items-center justify-center gap-8 h-full">
           <NavLink to="/" end className={({ isActive }) =>
             `text-[14px] h-full flex items-center transition-colors ${isActive ? 'text-primary border-b-2 border-primary' : 'text-on-surface-variant hover:text-on-surface'}`

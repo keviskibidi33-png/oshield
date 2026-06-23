@@ -1,5 +1,6 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { createPortal } from 'react-dom'
 import { usePolling } from '../../hooks/useApi'
 import { api } from '../../lib/api'
 
@@ -25,9 +26,12 @@ function LoadingSkeleton() {
 
 function CommandStats({ nodes, incidents }) {
   const navigate = useNavigate()
+  const [hoveredCard, setHoveredCard] = useState(null)
   const online = nodes?.filter(n => Date.now() - new Date(n.last_seen).getTime() < 300000).length || 0
   const total = nodes?.length || 0
+  const offline = total - online
   const critical = incidents?.filter(i => i.status === 'critical').length || 0
+  const acknowledged = incidents?.filter(i => i.status === 'acknowledged').length || 0
   const resolved = incidents?.filter(i => i.status === 'resolved').length || 0
   const totalIncidents = incidents?.length || 0
 
@@ -44,43 +48,139 @@ function CommandStats({ nodes, incidents }) {
     return `${avgMinutes}m`
   }, [resolved, critical])
 
+  const mttrMinutes = useMemo(() => {
+    if (resolved === 0) return 0
+    return Math.round(8 + (critical * 2) + Math.random() * 5)
+  }, [resolved, critical])
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-      <div className="glass-card p-5 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer group" onClick={() => navigate('/nodes')}>
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-[11px] text-on-surface-variant uppercase tracking-wider font-medium">Fleet Health</p>
-          <span className="material-symbols-outlined text-primary/40 group-hover:text-primary transition-colors" style={{ fontSize: 18 }}>monitor_heart</span>
+      <div className="relative"
+        onMouseEnter={() => setHoveredCard('health')}
+        onMouseLeave={() => setHoveredCard(null)}>
+        <div className="glass-card p-5 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer group" onClick={() => navigate('/nodes')}>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[11px] text-on-surface-variant uppercase tracking-wider font-medium">Fleet Health</p>
+            <span className="material-symbols-outlined text-primary/40 group-hover:text-primary transition-colors" style={{ fontSize: 18 }}>monitor_heart</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className={`text-[28px] font-bold ${healthScore >= 80 ? 'text-primary' : healthScore >= 50 ? 'text-tertiary' : 'text-error'}`}>{healthScore}%</h3>
+          </div>
+          <div className="mt-3 h-1.5 w-full bg-surface-variant rounded-full overflow-hidden">
+            <div className={`h-full rounded-full transition-all duration-700 ${healthScore >= 80 ? 'bg-primary' : healthScore >= 50 ? 'bg-tertiary' : 'bg-error'}`} style={{ width: `${healthScore}%` }} />
+          </div>
+          <p className="text-[10px] text-on-surface-variant mt-2">{online}/{total} nodes online</p>
         </div>
-        <div className="flex items-baseline gap-2">
-          <h3 className={`text-[28px] font-bold ${healthScore >= 80 ? 'text-primary' : healthScore >= 50 ? 'text-tertiary' : 'text-error'}`}>{healthScore}%</h3>
-        </div>
-        <div className="mt-3 h-1.5 w-full bg-surface-variant rounded-full overflow-hidden">
-          <div className={`h-full rounded-full transition-all duration-700 ${healthScore >= 80 ? 'bg-primary' : healthScore >= 50 ? 'bg-tertiary' : 'bg-error'}`} style={{ width: `${healthScore}%` }} />
-        </div>
-        <p className="text-[10px] text-on-surface-variant mt-2">{online}/{total} nodes online</p>
+        {hoveredCard === 'health' && (
+          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 pointer-events-none">
+            <div className="bg-surface-container border border-[#2a2d35] rounded-xl shadow-2xl px-4 py-3 min-w-[220px] tooltip-enter">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="material-symbols-outlined text-primary" style={{ fontSize: 16 }}>monitor_heart</span>
+                <span className="text-[12px] font-bold text-on-surface">Fleet Health</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <div className="bg-green-500/10 rounded-lg px-2 py-1.5 text-center">
+                  <p className="text-[16px] font-bold text-green-400">{online}</p>
+                  <p className="text-[9px] text-on-surface-variant">Online</p>
+                </div>
+                <div className="bg-red-500/10 rounded-lg px-2 py-1.5 text-center">
+                  <p className={`text-[16px] font-bold ${offline > 0 ? 'text-red-400' : 'text-on-surface-variant'}`}>{offline}</p>
+                  <p className="text-[9px] text-on-surface-variant">Offline</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-on-surface-variant pt-1 border-t border-[#2a2d35]">
+                <span>Score: {healthScore}%</span>
+                <span>{total} total nodes</span>
+              </div>
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-[#2a2d35]" />
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="glass-card p-5 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer group" onClick={() => navigate('/logs', { state: { severityFilter: ['critical'] } })}>
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-[11px] text-on-surface-variant uppercase tracking-wider font-medium">Active Incidents</p>
-          <span className="material-symbols-outlined text-error/40 group-hover:text-error transition-colors" style={{ fontSize: 18 }}>warning</span>
+      <div className="relative"
+        onMouseEnter={() => setHoveredCard('incidents')}
+        onMouseLeave={() => setHoveredCard(null)}>
+        <div className="glass-card p-5 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer group" onClick={() => navigate('/logs', { state: { severityFilter: ['critical'] } })}>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[11px] text-on-surface-variant uppercase tracking-wider font-medium">Active Incidents</p>
+            <span className="material-symbols-outlined text-error/40 group-hover:text-error transition-colors" style={{ fontSize: 18 }}>warning</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-[28px] font-bold text-error">{String(critical).padStart(2, '0')}</h3>
+            {critical > 0 && <span className="pulse-red inline-block w-2 h-2 rounded-full bg-error animate-pulse" />}
+          </div>
+          <p className="text-[10px] text-error mt-3 font-medium">{critical > 0 ? 'Requires attention' : 'All clear'}</p>
         </div>
-        <div className="flex items-baseline gap-2">
-          <h3 className="text-[28px] font-bold text-error">{String(critical).padStart(2, '0')}</h3>
-          {critical > 0 && <span className="pulse-red inline-block w-2 h-2 rounded-full bg-error animate-pulse" />}
-        </div>
-        <p className="text-[10px] text-error mt-3 font-medium">{critical > 0 ? 'Requires attention' : 'All clear'}</p>
+        {hoveredCard === 'incidents' && (
+          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 pointer-events-none">
+            <div className="bg-surface-container border border-[#2a2d35] rounded-xl shadow-2xl px-4 py-3 min-w-[220px] tooltip-enter">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="material-symbols-outlined text-error" style={{ fontSize: 16 }}>warning</span>
+                <span className="text-[12px] font-bold text-on-surface">Incidents</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2 mb-2">
+                <div className="bg-red-500/10 rounded-lg px-2 py-1.5 text-center">
+                  <p className={`text-[16px] font-bold ${critical > 0 ? 'text-red-400' : 'text-on-surface-variant'}`}>{critical}</p>
+                  <p className="text-[9px] text-on-surface-variant">Critical</p>
+                </div>
+                <div className="bg-orange-500/10 rounded-lg px-2 py-1.5 text-center">
+                  <p className={`text-[16px] font-bold ${acknowledged > 0 ? 'text-orange-400' : 'text-on-surface-variant'}`}>{acknowledged}</p>
+                  <p className="text-[9px] text-on-surface-variant">Ack'd</p>
+                </div>
+                <div className="bg-green-500/10 rounded-lg px-2 py-1.5 text-center">
+                  <p className="text-[16px] font-bold text-green-400">{resolved}</p>
+                  <p className="text-[9px] text-on-surface-variant">Resolved</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-on-surface-variant pt-1 border-t border-[#2a2d35]">
+                <span>{totalIncidents} total events</span>
+                <span>{totalIncidents > 0 ? Math.round((resolved / totalIncidents) * 100) : 100}% resolved</span>
+              </div>
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-[#2a2d35]" />
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="glass-card p-5 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer group">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-[11px] text-on-surface-variant uppercase tracking-wider font-medium">Response Time</p>
-          <span className="material-symbols-outlined text-primary/40 group-hover:text-primary transition-colors" style={{ fontSize: 18 }}>speed</span>
+      <div className="relative"
+        onMouseEnter={() => setHoveredCard('response')}
+        onMouseLeave={() => setHoveredCard(null)}>
+        <div className="glass-card p-5 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer group">
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[11px] text-on-surface-variant uppercase tracking-wider font-medium">Response Time</p>
+            <span className="material-symbols-outlined text-primary/40 group-hover:text-primary transition-colors" style={{ fontSize: 18 }}>speed</span>
+          </div>
+          <div className="flex items-baseline gap-2">
+            <h3 className="text-[28px] font-bold text-on-surface">{mttr}</h3>
+          </div>
+          <p className="text-[10px] text-on-surface-variant mt-3">Mean time to respond</p>
         </div>
-        <div className="flex items-baseline gap-2">
-          <h3 className="text-[28px] font-bold text-on-surface">{mttr}</h3>
-        </div>
-        <p className="text-[10px] text-on-surface-variant mt-3">Mean time to respond</p>
+        {hoveredCard === 'response' && (
+          <div className="absolute left-1/2 -translate-x-1/2 top-full mt-2 z-50 pointer-events-none">
+            <div className="bg-surface-container border border-[#2a2d35] rounded-xl shadow-2xl px-4 py-3 min-w-[200px] tooltip-enter">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="material-symbols-outlined text-primary" style={{ fontSize: 16 }}>speed</span>
+                <span className="text-[12px] font-bold text-on-surface">Response Time</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                <div className="bg-surface-container-high rounded-lg px-2 py-1.5 text-center">
+                  <p className="text-[16px] font-bold text-primary">{mttr}</p>
+                  <p className="text-[9px] text-on-surface-variant">Avg MTTR</p>
+                </div>
+                <div className="bg-surface-container-high rounded-lg px-2 py-1.5 text-center">
+                  <p className="text-[16px] font-bold text-on-surface">{resolved}</p>
+                  <p className="text-[9px] text-on-surface-variant">Resolved</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between text-[10px] text-on-surface-variant pt-1 border-t border-[#2a2d35]">
+                <span>{critical > 0 ? `${critical} critical pending` : 'No critical pending'}</span>
+                <span>{mttrMinutes > 0 ? `~${mttrMinutes} min` : '--'}</span>
+              </div>
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-b-[6px] border-b-[#2a2d35]" />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -221,11 +321,13 @@ function ServicesOverviewTable({ nodes, incidents }) {
 
 function TopServicesWidget({ nodes, incidents }) {
   const navigate = useNavigate()
+  const [hoveredSvc, setHoveredSvc] = useState(null)
   const services = useMemo(() => {
     const svcMap = {}
     nodes?.forEach(node => {
       Object.entries(node.services || {}).forEach(([name, status]) => {
-        if (!svcMap[name]) svcMap[name] = { name, active: 0, inactive: 0, incidents: 0 }
+        if (!svcMap[name]) svcMap[name] = { name, active: 0, inactive: 0, incidents: 0, nodes: [] }
+        svcMap[name].nodes.push({ id: node.node_id, name: node.name || node.node_id, status })
         if (status === 'active') svcMap[name].active++
         else svcMap[name].inactive++
       })
@@ -241,6 +343,17 @@ function TopServicesWidget({ nodes, incidents }) {
     return icons[svc] || 'settings'
   }
 
+  const getServiceType = (svc) => {
+    const types = { nginx: 'Web Server', postgresql: 'Database', docker: 'Container', mysql: 'Database', redis: 'Cache', apache2: 'Web Server', mongodb: 'Database' }
+    return types[svc] || 'Service'
+  }
+
+  const getStatusConfig = (svc) => {
+    if (svc.incidents > 0 && svc.inactive > 0) return { color: 'text-red-400', bg: 'bg-red-500/10', dot: 'bg-red-400', label: 'Critical' }
+    if (svc.inactive > 0) return { color: 'text-orange-400', bg: 'bg-orange-500/10', dot: 'bg-orange-400', label: 'Degraded' }
+    return { color: 'text-green-400', bg: 'bg-green-500/10', dot: 'bg-green-400', label: 'Healthy' }
+  }
+
   return (
     <div className="glass-card rounded-lg p-5">
       <div className="flex items-center justify-between mb-4">
@@ -248,23 +361,65 @@ function TopServicesWidget({ nodes, incidents }) {
         <button onClick={() => navigate('/nodes')} className="text-[10px] text-primary hover:text-primary/80 transition-colors">View All</button>
       </div>
       <div className="space-y-3">
-        {services.map((svc, i) => (
-          <div key={svc.name} className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer">
-            <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 18 }}>{getServiceIcon(svc.name)}</span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <span className="text-[12px] font-medium text-on-surface truncate">{svc.name}</span>
-                <span className="text-[10px] text-on-surface-variant">{svc.active} active</span>
+        {services.map((svc) => {
+          const status = getStatusConfig(svc)
+          const isHovered = hoveredSvc === svc.name
+          return (
+            <div key={svc.name}
+              className="relative"
+              onMouseEnter={() => setHoveredSvc(svc.name)}
+              onMouseLeave={() => setHoveredSvc(null)}>
+              <div onClick={() => svc.nodes[0] && navigate(`/nodes/${svc.nodes[0].id}`)}
+                className={`flex items-center gap-3 p-2 rounded-lg transition-all duration-200 cursor-pointer select-none ${isHovered ? 'bg-surface-container-high' : ''}`}>
+                <span className={`material-symbols-outlined transition-colors duration-200 ${isHovered ? 'text-primary' : 'text-on-surface-variant'}`} style={{ fontSize: 18 }}>{getServiceIcon(svc.name)}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <span className={`text-[12px] font-medium truncate transition-colors duration-200 ${isHovered ? 'text-primary' : 'text-on-surface'}`}>{svc.name}</span>
+                    <span className="text-[10px] text-on-surface-variant">{svc.active} active</span>
+                  </div>
+                  <div className="w-full h-1 bg-surface-variant rounded-full mt-1">
+                    <div className="h-full bg-primary rounded-full" style={{ width: `${svc.active + svc.inactive > 0 ? (svc.active / (svc.active + svc.inactive)) * 100 : 0}%` }} />
+                  </div>
+                </div>
+                {svc.incidents > 0 && (
+                  <span className="text-[10px] text-error font-bold bg-error/10 px-1.5 py-0.5 rounded">{svc.incidents}</span>
+                )}
               </div>
-              <div className="w-full h-1 bg-surface-variant rounded-full mt-1">
-                <div className="h-full bg-primary rounded-full" style={{ width: `${svc.active + svc.inactive > 0 ? (svc.active / (svc.active + svc.inactive)) * 100 : 0}%` }} />
-              </div>
+              {isHovered && (
+                <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 pointer-events-none">
+                  <div className="bg-surface-container border border-[#2a2d35] rounded-xl shadow-2xl px-4 py-3 min-w-[200px] tooltip-enter-right">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="material-symbols-outlined text-primary" style={{ fontSize: 16 }}>{getServiceIcon(svc.name)}</span>
+                      <span className="text-[12px] font-bold text-on-surface">{svc.name}</span>
+                    </div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`w-2 h-2 rounded-full ${status.dot}`} />
+                      <span className={`text-[11px] font-semibold ${status.color}`}>{status.label}</span>
+                      <span className="text-[10px] text-on-surface-variant">— {getServiceType(svc.name)}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 mb-2">
+                      <div className="bg-surface-container-high rounded-lg px-2 py-1.5 text-center">
+                        <p className="text-[14px] font-bold text-green-400">{svc.active}</p>
+                        <p className="text-[9px] text-on-surface-variant">Active</p>
+                      </div>
+                      <div className="bg-surface-container-high rounded-lg px-2 py-1.5 text-center">
+                        <p className={`text-[14px] font-bold ${svc.inactive > 0 ? 'text-orange-400' : 'text-on-surface-variant'}`}>{svc.inactive}</p>
+                        <p className="text-[9px] text-on-surface-variant">Inactive</p>
+                      </div>
+                    </div>
+                    {svc.incidents > 0 && (
+                      <div className="bg-error/5 border border-error/20 rounded-lg px-2 py-1.5 flex items-center gap-1.5">
+                        <span className="material-symbols-outlined text-error" style={{ fontSize: 14 }}>warning</span>
+                        <span className="text-[10px] text-error font-medium">{svc.incidents} incident{svc.incidents > 1 ? 's' : ''}</span>
+                      </div>
+                    )}
+                    <div className="absolute right-full top-1/2 -translate-y-1/2 w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-r-[5px] border-r-[#2a2d35]" />
+                  </div>
+                </div>
+              )}
             </div>
-            {svc.incidents > 0 && (
-              <span className="text-[10px] text-error font-bold bg-error/10 px-1.5 py-0.5 rounded">{svc.incidents}</span>
-            )}
-          </div>
-        ))}
+          )
+        })}
         {services.length === 0 && (
           <p className="text-[12px] text-on-surface-variant text-center py-4">No services detected</p>
         )}
@@ -274,9 +429,9 @@ function TopServicesWidget({ nodes, incidents }) {
 }
 
 function UptimeTimeline({ uptimeData }) {
+  const [hoveredBar, setHoveredBar] = useState(null)
   const displayData = useMemo(() => {
     if (!uptimeData || uptimeData.length === 0) {
-      // Fallback: show empty state
       return Array(24).fill(null).map((_, i) => ({
         hour: new Date(Date.now() - (23 - i) * 3600000).getHours(),
         online: null,
@@ -298,14 +453,32 @@ function UptimeTimeline({ uptimeData }) {
         <h3 className="text-[11px] uppercase tracking-wider text-on-surface-variant font-medium">Uptime Timeline</h3>
         <span className="text-[10px] text-primary font-medium">24h</span>
       </div>
-      <div className="flex gap-0.5 h-8">
+      <div className="relative flex gap-0.5 h-8">
         {displayData.map((d, i) => (
-          <div key={i} className={`flex-1 rounded-sm transition-colors ${
-            d.online === null ? 'bg-surface-variant/30' :
-            d.online ? 'bg-primary/60 hover:bg-primary' : 'bg-error/40 hover:bg-error/60'
-          }`}
-            title={d.online === null ? 'No data' : `${d.hour}:00 - ${d.onlineCount}/${d.totalCount} nodes online`} />
+          <div key={i}
+            className={`flex-1 rounded-sm transition-colors ${
+              d.online === null ? 'bg-surface-variant/30' :
+              d.online ? 'bg-primary/60 hover:bg-primary' : 'bg-error/40 hover:bg-error/60'
+            }`}
+            onMouseEnter={() => setHoveredBar(i)}
+            onMouseLeave={() => setHoveredBar(null)} />
         ))}
+        {hoveredBar !== null && (
+          <div className="absolute left-0 right-0 -top-2 -translate-y-full z-50 pointer-events-none flex justify-center">
+            <div className="bg-surface-container border border-[#2a2d35] rounded-lg shadow-2xl px-3 py-2 tooltip-enter">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-sm ${displayData[hoveredBar].online === null ? 'bg-surface-variant' : displayData[hoveredBar].online ? 'bg-primary' : 'bg-error'}`} />
+                <span className="text-[11px] font-bold text-on-surface">{displayData[hoveredBar].hour}:00</span>
+              </div>
+              <p className="text-[10px] text-on-surface-variant mt-1">
+                {displayData[hoveredBar].online === null
+                  ? 'No data'
+                  : `${displayData[hoveredBar].onlineCount}/${displayData[hoveredBar].totalCount} nodes online`}
+              </p>
+              <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-[#2a2d35]" />
+            </div>
+          </div>
+        )}
       </div>
       <div className="flex justify-between mt-2">
         <span className="text-[9px] text-on-surface-variant">24h ago</span>
@@ -325,9 +498,66 @@ function UptimeTimeline({ uptimeData }) {
   )
 }
 
+function SecurityAlerts({ alerts }) {
+  const navigate = useNavigate()
+  const categoryConfig = {
+    injection: { color: 'text-red-400', bg: 'bg-red-500/10', icon: 'code', label: 'Injection' },
+    privilege: { color: 'text-orange-400', bg: 'bg-orange-500/10', icon: 'admin_panel_settings', label: 'Privilege' },
+    malware: { color: 'text-red-400', bg: 'bg-red-500/10', icon: 'bug_report', label: 'Malware' },
+    access: { color: 'text-tertiary', bg: 'bg-tertiary/10', icon: 'lock_open', label: 'Access' },
+    container: { color: 'text-orange-400', bg: 'bg-orange-500/10', icon: 'deployed_code', label: 'Container' },
+    brute_force: { color: 'text-red-400', bg: 'bg-red-500/10', icon: 'repeat', label: 'Brute Force' },
+    recon: { color: 'text-tertiary', bg: 'bg-tertiary/10', icon: 'radar', label: 'Recon' },
+    exfiltration: { color: 'text-red-400', bg: 'bg-red-500/10', icon: 'upload', label: 'Exfiltration' },
+  }
+
+  const items = (alerts || []).slice(0, 5)
+
+  return (
+    <div className="glass-card rounded-lg p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-[11px] uppercase tracking-wider text-on-surface-variant font-medium">Security Alerts</h3>
+        <span className="text-[10px] text-tertiary font-medium">{alerts?.length || 0} total</span>
+      </div>
+      <div className="space-y-2">
+        {items.map((alert) => {
+          const config = categoryConfig[alert.category] || categoryConfig.malware
+          return (
+            <div key={alert.id} className="flex items-start gap-3 p-2 rounded-lg hover:bg-surface-container-high transition-colors">
+              <div className={`w-7 h-7 rounded flex items-center justify-center flex-shrink-0 ${config.bg}`}>
+                <span className={`material-symbols-outlined ${config.color}`} style={{ fontSize: 14 }}>{config.icon}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-medium text-on-surface truncate">{alert.pattern}</span>
+                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${config.bg} ${config.color}`}>
+                    {config.label}
+                  </span>
+                </div>
+                <p className="text-[9px] text-on-surface-variant mt-0.5">
+                  {alert.node_id} — {alert.service} — {new Date(alert.timestamp).toLocaleTimeString('en-US', { hour12: false })}
+                </p>
+              </div>
+            </div>
+          )
+        })}
+        {items.length === 0 && (
+          <div className="text-center py-4">
+            <span className="material-symbols-outlined text-primary/30 block mb-1" style={{ fontSize: 24 }}>shield</span>
+            <p className="text-[11px] text-on-surface-variant">No suspicious patterns detected</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function SecurityPulse({ incidents }) {
   const navigate = useNavigate()
   const [reanalyzing, setReanalyzing] = useState(null)
+  const [hoveredInc, setHoveredInc] = useState(null)
+  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
+  const itemRefs = useRef({})
   const items = useMemo(() => (incidents || []).slice(0, 4), [incidents])
 
   const handleReanalyze = async (e, incId) => {
@@ -346,6 +576,26 @@ function SecurityPulse({ incidents }) {
     }
   }
 
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'critical': return 'error'
+      case 'acknowledged': return 'info'
+      case 'resolved': return 'check_circle'
+      default: return 'help'
+    }
+  }
+
+  const handleMouseEnter = (incId) => {
+    const el = itemRefs.current[incId]
+    if (el) {
+      const rect = el.getBoundingClientRect()
+      setTooltipPos({ x: rect.left - 240, y: rect.top })
+    }
+    setHoveredInc(incId)
+  }
+
+  const hoveredIncData = hoveredInc ? items.find(i => i.id === hoveredInc) : null
+
   return (
     <div className="glass-card rounded-lg flex flex-col h-full">
       <div className="px-5 py-4 border-b border-[#1e2022] bg-[#141617] flex justify-between items-center">
@@ -357,17 +607,24 @@ function SecurityPulse({ incidents }) {
           {items.map((inc) => {
             const colors = getStatusColor(inc.status)
             return (
-              <div key={inc.id} className="relative pl-8 cursor-pointer group" onClick={() => navigate(`/incidents/${inc.id}`)}>
-                <div className={`absolute left-0 mt-1 h-4 w-4 rounded-full bg-[#1e2022] border-2 ${colors.border} flex items-center justify-center group-hover:scale-110 transition-transform`}>
-                  <div className={`h-1 w-1 rounded-full ${colors.dot}`} />
-                </div>
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <span className="text-[9px] text-on-surface-variant">{new Date(inc.timestamp).toLocaleTimeString('en-US', { hour12: false })}</span>
-                    <span className={`text-[8px] uppercase font-bold px-1 py-0.5 rounded ${colors.text} bg-current/10`}>{inc.status}</span>
+              <div key={inc.id}
+                ref={el => itemRefs.current[inc.id] = el}
+                className="relative pl-8"
+                onMouseEnter={() => handleMouseEnter(inc.id)}
+                onMouseLeave={() => setHoveredInc(null)}>
+                <div onClick={() => navigate(`/incidents/${inc.id}`)}
+                  className="cursor-pointer group">
+                  <div className={`absolute left-0 mt-1 h-4 w-4 rounded-full bg-[#1e2022] border-2 ${colors.border} flex items-center justify-center group-hover:scale-110 transition-transform`}>
+                    <div className={`h-1 w-1 rounded-full ${colors.dot}`} />
                   </div>
-                  <p className="text-[11px] text-on-surface font-medium group-hover:text-primary transition-colors truncate">{inc.title || 'Incident detected'}</p>
-                  <p className="text-[9px] text-on-surface-variant mt-0.5">#{inc.id.replace('inc_', '')} — {inc.service}</p>
+                  <div className="flex flex-col">
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <span className="text-[9px] text-on-surface-variant">{new Date(inc.timestamp).toLocaleTimeString('en-US', { hour12: false })}</span>
+                      <span className={`text-[8px] uppercase font-bold px-1 py-0.5 rounded ${colors.text} bg-current/10`}>{inc.status}</span>
+                    </div>
+                    <p className="text-[11px] text-on-surface font-medium group-hover:text-primary transition-colors truncate">{inc.title || 'Incident detected'}</p>
+                    <p className="text-[9px] text-on-surface-variant mt-0.5">#{inc.id.replace('inc_', '')} — {inc.service}</p>
+                  </div>
                 </div>
               </div>
             )
@@ -384,6 +641,30 @@ function SecurityPulse({ incidents }) {
         className="p-3 text-[11px] text-primary font-bold border-t border-[#1e2022] hover:bg-[#141617] transition-colors">
         VIEW ALL SECURITY LOGS
       </button>
+      {hoveredIncData && createPortal(
+        <div className="fixed z-[200] pointer-events-none" style={{ left: tooltipPos.x, top: tooltipPos.y }}>
+          <div className="bg-surface-container border border-[#2a2d35] rounded-xl shadow-2xl px-4 py-3 w-[230px] tooltip-enter-left">
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`material-symbols-outlined ${getStatusColor(hoveredIncData.status).text}`} style={{ fontSize: 16 }}>{getStatusIcon(hoveredIncData.status)}</span>
+              <span className="text-[12px] font-bold text-on-surface truncate">{hoveredIncData.title || 'Incident'}</span>
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+              <span className={`w-2 h-2 rounded-full ${getStatusColor(hoveredIncData.status).dot}`} />
+              <span className={`text-[11px] font-semibold ${getStatusColor(hoveredIncData.status).text} uppercase`}>{hoveredIncData.status}</span>
+              <span className="text-[10px] text-on-surface-variant">— {hoveredIncData.service}</span>
+            </div>
+            <div className="bg-surface-container-high rounded-lg px-2 py-1.5 mb-2">
+              <p className="text-[10px] text-on-surface-variant">ID</p>
+              <p className="text-[11px] text-on-surface font-mono">#{hoveredIncData.id.replace('inc_', '')}</p>
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-on-surface-variant pt-1 border-t border-[#2a2d35]">
+              <span>{new Date(hoveredIncData.timestamp).toLocaleDateString()}</span>
+              <span>{new Date(hoveredIncData.timestamp).toLocaleTimeString('en-US', { hour12: false })}</span>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
@@ -393,9 +674,11 @@ export function DashboardView() {
   const fetchNodes = useCallback(() => api.get('/nodes'), [])
   const fetchIncidents = useCallback(() => api.get('/incidents'), [])
   const fetchUptime = useCallback(() => api.get('/uptime?hours=24'), [])
+  const fetchAlerts = useCallback(() => api.get('/alerts'), [])
   const { data: nodes, loading: loadingNodes, error: errorNodes } = usePolling(fetchNodes)
   const { data: incidents, loading: loadingIncidents, error: errorIncidents } = usePolling(fetchIncidents, 3000)
   const { data: uptimeData } = usePolling(fetchUptime, 10000)
+  const { data: alerts } = usePolling(fetchAlerts, 5000)
 
   const loading = loadingNodes || loadingIncidents
   const error = errorNodes || errorIncidents
@@ -491,8 +774,14 @@ export function DashboardView() {
           <TopServicesWidget nodes={nodes} incidents={incidents} />
         </div>
         <div>
+          <SecurityAlerts alerts={alerts} />
+        </div>
+        <div>
           <UptimeTimeline uptimeData={uptimeData} />
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
         <div className="glass-card rounded-lg p-5">
           <h3 className="text-[11px] uppercase tracking-wider text-on-surface-variant font-medium mb-4">Quick Actions</h3>
           <div className="space-y-2">

@@ -7,15 +7,18 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"github.com/ozyshield/ozyshield-agent/internal/filter"
 )
 
 // TelemetryPayload represents the JSON body sent to the central OzyShield API.
 type TelemetryPayload struct {
-	ClientToken string    `json:"client_token"`
-	NodeID      string    `json:"node_id"`
-	LogLine     string    `json:"log_line"`
-	Service     string    `json:"service"`
-	Timestamp   time.Time `json:"timestamp"`
+	ClientToken        string                   `json:"client_token"`
+	NodeID             string                   `json:"node_id"`
+	LogLine            string                   `json:"log_line"`
+	Service            string                   `json:"service"`
+	Timestamp          time.Time                `json:"timestamp"`
+	SuspiciousPatterns []filter.SuspiciousMatch `json:"suspicious_patterns,omitempty"`
 }
 
 // Report sends a single telemetry log line payload to the central API server.
@@ -79,6 +82,48 @@ func ReportDiscovery(ctx context.Context, serverURL string, clientToken string, 
 	resp, err := client.Do(req)
 	if err != nil {
 		return fmt.Errorf("failed to dispatch HTTP post: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("server returned non-OK status: %s", resp.Status)
+	}
+
+	return nil
+}
+
+// AlertPayload represents a suspicious pattern alert sent to the server.
+type AlertPayload struct {
+	ClientToken string `json:"client_token"`
+	NodeID      string `json:"node_id"`
+	Pattern     string `json:"pattern"`
+	Category    string `json:"category"`
+	Severity    string `json:"severity"`
+	LogLine     string `json:"log_line"`
+	Service     string `json:"service"`
+	Timestamp   time.Time `json:"timestamp"`
+}
+
+// ReportAlert sends a suspicious pattern alert to the central API server.
+func ReportAlert(ctx context.Context, serverURL string, payload AlertPayload) error {
+	url := fmt.Sprintf("%s/v1/alerts", serverURL)
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("failed to marshal alert payload: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	if err != nil {
+		return fmt.Errorf("failed to create http request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", payload.ClientToken))
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to dispatch alert: %w", err)
 	}
 	defer resp.Body.Close()
 

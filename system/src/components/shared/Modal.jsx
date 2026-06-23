@@ -13,9 +13,9 @@ export function Modal({ open, onClose, title, children }) {
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center">
+    <div className="fixed inset-0 z-[200] flex items-center justify-center pointer-events-auto">
       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
-      <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-md mx-4 p-6">
+      <div className="relative bg-surface-container border border-[#1e2022] rounded-xl w-full max-w-md mx-4 p-6 max-h-[85vh] overflow-y-auto shadow-2xl">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-[16px] font-semibold text-on-surface">{title}</h3>
           <button onClick={onClose} className="text-on-surface-variant hover:text-on-surface transition-colors">

@@ -2,6 +2,7 @@ package db
 
 import (
 	"errors"
+	"strings"
 	"sync"
 	"time"
 )
@@ -31,6 +32,10 @@ type Incident struct {
 	Status          string    `json:"status"`           // "critical", "acknowledged", "resolved", "annulled"
 	AssignedTeam    string    `json:"assigned_team"`
 	Timestamp       time.Time `json:"timestamp"`
+	ResolvedAt      time.Time `json:"resolved_at,omitempty"`
+	ReopenedCount   int       `json:"reopened_count"`
+	LastReopenedAt  time.Time `json:"last_reopened_at,omitempty"`
+	LogHash         string    `json:"log_hash"`
 }
 
 // UptimeRecord stores hourly uptime snapshots for nodes.
@@ -39,6 +44,18 @@ type UptimeRecord struct {
 	NodeStatus map[string]bool   `json:"node_status"` // node_id -> online?
 	OnlineCount int              `json:"online_count"`
 	TotalCount  int              `json:"total_count"`
+}
+
+// Alert represents a suspicious pattern detected by an agent.
+type Alert struct {
+	ID        string    `json:"id"`
+	NodeID    string    `json:"node_id"`
+	Pattern   string    `json:"pattern"`
+	Category  string    `json:"category"`
+	Severity  string    `json:"severity"`
+	LogLine   string    `json:"log_line"`
+	Service   string    `json:"service"`
+	Timestamp time.Time `json:"timestamp"`
 }
 
 // Store defines the interface for database operations.
@@ -53,6 +70,10 @@ type Store interface {
 	UpdateIncident(id string, status string) (Incident, error)
 	UpdateIncidentTeam(id string, team string) (Incident, error)
 	UpdateIncidentDiagnosis(id, title, diagnosis, source string, remediation []string) (Incident, error)
+	FindResolvedIncidentByHash(logHash string, withinDuration time.Duration) (*Incident, error)
+	ReopenIncident(id string) (Incident, error)
+	AddAlert(alert Alert) (Alert, error)
+	ListAlerts() ([]Alert, error)
 	RecordUptime(record UptimeRecord) error
 	GetUptimeHistory(hours int) ([]UptimeRecord, error)
 	ClearAll() error
@@ -63,6 +84,7 @@ type MemoryStore struct {
 	mu        sync.RWMutex
 	nodes     map[string]Node
 	incidents []Incident
+	alerts    []Alert
 	uptime    []UptimeRecord
 }
 
@@ -71,6 +93,7 @@ func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
 		nodes:     make(map[string]Node),
 		incidents: make([]Incident, 0),
+		alerts:    make([]Alert, 0),
 		uptime:    make([]UptimeRecord, 0),
 	}
 }
@@ -173,6 +196,9 @@ func (ms *MemoryStore) UpdateIncident(id string, status string) (Incident, error
 	for i, inc := range ms.incidents {
 		if inc.ID == id {
 			ms.incidents[i].Status = status
+			if status == "resolved" {
+				ms.incidents[i].ResolvedAt = time.Now()
+			}
 			return ms.incidents[i], nil
 		}
 	}
@@ -213,6 +239,57 @@ func (ms *MemoryStore) UpdateIncidentDiagnosis(id, title, diagnosis, source stri
 	return Incident{}, errors.New("incident not found")
 }
 
+// FindResolvedIncidentByHash searches for a resolved incident matching the given log hash within the specified duration.
+func (ms *MemoryStore) FindResolvedIncidentByHash(logHash string, withinDuration time.Duration) (*Incident, error) {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+
+	since := time.Now().Add(-withinDuration)
+	for _, inc := range ms.incidents {
+		if inc.LogHash == logHash && inc.Status == "resolved" && !inc.ResolvedAt.IsZero() && inc.ResolvedAt.After(since) {
+			return &inc, nil
+		}
+	}
+	return nil, errors.New("no matching resolved incident found")
+}
+
+// ReopenIncident changes a resolved incident back to critical and increments its reopen count.
+func (ms *MemoryStore) ReopenIncident(id string) (Incident, error) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
+	for i, inc := range ms.incidents {
+		if inc.ID == id {
+			ms.incidents[i].Status = "critical"
+			ms.incidents[i].ReopenedCount++
+			ms.incidents[i].LastReopenedAt = time.Now()
+			return ms.incidents[i], nil
+		}
+	}
+	return Incident{}, errors.New("incident not found")
+}
+
+// AddAlert appends a new alert to the list.
+func (ms *MemoryStore) AddAlert(alert Alert) (Alert, error) {
+	ms.mu.Lock()
+	defer ms.mu.Unlock()
+
+	if alert.ID == "" {
+		alert.ID = "alert_" + time.Now().Format("20060102150405") + "_" + strings.ToLower(alert.NodeID[:min(len(alert.NodeID), 4)])
+	}
+	alert.Timestamp = time.Now()
+	ms.alerts = append([]Alert{alert}, ms.alerts...) // Prepend so newest is first
+	return alert, nil
+}
+
+// ListAlerts returns all alerts in reverse chronological order.
+func (ms *MemoryStore) ListAlerts() ([]Alert, error) {
+	ms.mu.RLock()
+	defer ms.mu.RUnlock()
+
+	return ms.alerts, nil
+}
+
 // RecordUptime saves an hourly uptime snapshot.
 func (ms *MemoryStore) RecordUptime(record UptimeRecord) error {
 	ms.mu.Lock()
@@ -239,4 +316,11 @@ func (ms *MemoryStore) GetUptimeHistory(hours int) ([]UptimeRecord, error) {
 	result := make([]UptimeRecord, hours)
 	copy(result, ms.uptime[start:])
 	return result, nil
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

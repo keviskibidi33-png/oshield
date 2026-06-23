@@ -60,3 +60,11 @@ func (dc *DiagnosticsCache) Set(logLine string, diag CachedDiagnosis) {
 func (dc *DiagnosticsCache) PreSeed(logLine string, diag CachedDiagnosis) {
 	dc.Set(logLine, diag)
 }
+
+// HashLogLine calculates a SHA-256 fingerprint for a given log line after normalizing it.
+func HashLogLine(logLine string) string {
+	normalized := strings.TrimSpace(strings.ToLower(logLine))
+	hasher := sha256.New()
+	hasher.Write([]byte(normalized))
+	return hex.EncodeToString(hasher.Sum(nil))
+}
