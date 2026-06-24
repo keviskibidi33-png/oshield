@@ -44,7 +44,7 @@ function TeamDetail({ teamId }) {
   const fetchUsers = useCallback(() => api.get('/users'), [])
   const { data: teams, refetch: refetchTeams } = usePolling(fetchTeams)
   const { data: incidents } = usePolling(fetchIncidents, 3000)
-  const { data: users } = usePolling(fetchUsers)
+  const { data: users, refetch: refetchUsers } = usePolling(fetchUsers)
 
   const team = useMemo(() => {
     if (!teams) return null
@@ -98,6 +98,7 @@ function TeamDetail({ teamId }) {
       setSelectedUser('')
       setShowAddMember(false)
       refetchTeams()
+      refetchUsers()
     } catch (e) {
       addNotification({ type: 'error', title: 'Add Member Failed', body: e.message, severity: 'critical' })
     }

@@ -126,12 +126,31 @@ func (us *UserStore) create(u User) User {
 func (us *UserStore) update(id string, u User) (User, bool) {
 	us.mu.Lock()
 	defer us.mu.Unlock()
-	if _, ok := us.users[id]; !ok {
+	existing, ok := us.users[id]
+	if !ok {
 		return User{}, false
 	}
-	u.ID = id
-	us.users[id] = u
-	return u, true
+	if u.Name != "" {
+		existing.Name = u.Name
+	}
+	if u.Email != "" {
+		existing.Email = u.Email
+	}
+	if u.Role != "" {
+		existing.Role = u.Role
+	}
+	if u.Teams != nil {
+		existing.Teams = u.Teams
+	}
+	if u.Avatar != "" {
+		existing.Avatar = u.Avatar
+	}
+	if u.Password != "" {
+		existing.Password = u.Password
+	}
+	existing.ID = id
+	us.users[id] = existing
+	return existing, true
 }
 
 func (us *UserStore) delete(id string) bool {
