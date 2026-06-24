@@ -794,21 +794,28 @@ export function NodesView() {
                         {node.os} ({node.platform})
                       </td>
                       <td className="px-6 py-4">
-                        {totalCount > 0 ? (
-                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold ${
-                            criticalCount > 0
-                              ? 'bg-red-500/10 text-red-400 border border-red-500/20'
-                              : 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
-                          }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${criticalCount > 0 ? 'bg-red-400 animate-pulse' : 'bg-orange-400'}`} />
-                            {totalCount} {criticalCount > 0 && `(${criticalCount} critical)`}
+                        {isOnline ? (
+                          totalCount > 0 ? (
+                            <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold ${
+                              criticalCount > 0
+                                ? 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                : 'bg-orange-500/10 text-orange-400 border border-orange-500/20'
+                            }`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${criticalCount > 0 ? 'bg-red-400 animate-pulse' : 'bg-orange-400'}`} />
+                              {totalCount} {criticalCount > 0 && `(${criticalCount} critical)`}
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-green-500/10 text-green-400 border border-green-500/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
+                              Clean
                           </span>
+                          )
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-green-500/10 text-green-400 border border-green-500/20">
-                            <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
-                            Clean
-                          </span>
-                        )}
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[11px] font-bold bg-neutral-500/10 text-neutral-500 border border-neutral-500/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-neutral-500" />
+                              Offline
+                            </span>
+                          )}
                       </td>
                       <td className="px-6 py-4">
                         <div className={`flex items-center gap-2 text-[14px] ${isOnline ? 'text-on-surface' : 'text-on-surface-variant'}`}>

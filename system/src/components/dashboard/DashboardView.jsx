@@ -190,10 +190,13 @@ function ServicesOverviewTable({ nodes, incidents }) {
   const navigate = useNavigate()
   const servicesData = useMemo(() => {
     const svcMap = {}
+    const onlineNodes = new Set()
     nodes?.forEach(node => {
+      const isOnline = Date.now() - new Date(node.last_seen).getTime() < 300000
+      if (isOnline) onlineNodes.add(node.node_id)
       Object.entries(node.services || {}).forEach(([name, status]) => {
         if (!svcMap[name]) svcMap[name] = { name, nodes: [], active: 0, inactive: 0, total: 0, primaryNode: null }
-        svcMap[name].nodes.push({ id: node.node_id, name: node.name || node.node_id, status })
+        svcMap[name].nodes.push({ id: node.node_id, name: node.name || node.node_id, status, isOnline })
         svcMap[name].total++
         if (status === 'active') svcMap[name].active++
         else svcMap[name].inactive++
@@ -201,7 +204,7 @@ function ServicesOverviewTable({ nodes, incidents }) {
     })
 
     incidents?.forEach(inc => {
-      if (svcMap[inc.service]) {
+      if (svcMap[inc.service] && onlineNodes.has(inc.node_id)) {
         if (!svcMap[inc.service].incidents) svcMap[inc.service].incidents = 0
         svcMap[inc.service].incidents++
         if (inc.status === 'critical') {
@@ -213,8 +216,9 @@ function ServicesOverviewTable({ nodes, incidents }) {
 
     Object.values(svcMap).forEach(svc => {
       const criticalNode = svc.nodes.find(n => n.status !== 'active')
-      const incidentNode = incidents?.find(i => i.service === svc.name)
+      const incidentNode = incidents?.find(i => i.service === svc.name && onlineNodes.has(i.node_id))
       svc.primaryNode = criticalNode || incidentNode ? (criticalNode?.id || incidentNode?.node_id) : svc.nodes[0]?.id
+      svc.allOffline = svc.nodes.every(n => !n.isOnline)
     })
 
     return Object.values(svcMap).sort((a, b) => (b.critical || 0) - (a.critical || 0) || (b.inactive) - (a.inactive))
@@ -230,15 +234,17 @@ function ServicesOverviewTable({ nodes, incidents }) {
     return types[svc] || 'Service'
   }
 
-  const getStatusConfig = (active, total, critical) => {
+  const getStatusConfig = (active, total, critical, allOffline) => {
+    if (allOffline) return { color: 'bg-neutral-500', textColor: 'text-neutral-500', label: 'Offline', bgLight: 'bg-neutral-500/10' }
     if (critical > 0) return { color: 'bg-red-500', textColor: 'text-red-400', label: 'Critical', bgLight: 'bg-red-500/10' }
     if (active === total) return { color: 'bg-green-500', textColor: 'text-green-400', label: 'Healthy', bgLight: 'bg-green-500/10' }
     if (active > 0) return { color: 'bg-orange-500', textColor: 'text-orange-400', label: 'Degraded', bgLight: 'bg-orange-500/10' }
     return { color: 'bg-red-500', textColor: 'text-red-400', label: 'Down', bgLight: 'bg-red-500/10' }
   }
 
-  const healthyCount = servicesData.filter(s => s.active === s.total && (s.critical || 0) === 0).length
-  const problemCount = servicesData.length - healthyCount
+  const healthyCount = servicesData.filter(s => !s.allOffline && s.active === s.total && (s.critical || 0) === 0).length
+  const offlineCount = servicesData.filter(s => s.allOffline).length
+  const problemCount = servicesData.length - healthyCount - offlineCount
 
   return (
     <div className="glass-card rounded-lg overflow-hidden">
@@ -249,6 +255,12 @@ function ServicesOverviewTable({ nodes, incidents }) {
             <span className="w-1.5 h-1.5 rounded-full bg-green-400" />
             {healthyCount} healthy
           </span>
+          {offlineCount > 0 && (
+            <span className="flex items-center gap-1.5 text-[10px] text-neutral-500">
+              <span className="w-1.5 h-1.5 rounded-full bg-neutral-500" />
+              {offlineCount} offline
+            </span>
+          )}
           {problemCount > 0 && (
             <span className="flex items-center gap-1.5 text-[10px] text-red-400">
               <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
@@ -270,14 +282,14 @@ function ServicesOverviewTable({ nodes, incidents }) {
           </thead>
           <tbody className="divide-y divide-[#1e2022]">
             {servicesData.map(svc => {
-              const status = getStatusConfig(svc.active, svc.total, svc.critical || 0)
+              const status = getStatusConfig(svc.active, svc.total, svc.critical || 0, svc.allOffline)
               const machineName = svc.nodes[0]?.name || '-'
               return (
                 <tr key={svc.name} onClick={() => svc.primaryNode && navigate(`/nodes/${svc.primaryNode}`)}
                   className="hover:bg-[#252830] active:bg-[#2a2d35] transition-all duration-150 cursor-pointer group">
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2.5">
-                      <span className={`w-2 h-2 rounded-full ${status.color} ${svc.critical > 0 ? 'animate-pulse' : ''}`} />
+                      <span className={`w-2 h-2 rounded-full ${status.color} ${svc.critical > 0 && !svc.allOffline ? 'animate-pulse' : ''}`} />
                       <span className="material-symbols-outlined text-on-surface-variant group-hover:text-primary transition-colors" style={{ fontSize: 16 }}>{getServiceIcon(svc.name)}</span>
                       <span className="text-[13px] font-medium text-on-surface group-hover:text-primary transition-colors">{svc.name}</span>
                     </div>
@@ -294,7 +306,9 @@ function ServicesOverviewTable({ nodes, incidents }) {
                     </span>
                   </td>
                   <td className="px-5 py-3 text-right">
-                    {svc.incidents > 0 ? (
+                    {svc.allOffline ? (
+                      <span className="text-[11px] text-neutral-600">—</span>
+                    ) : svc.incidents > 0 ? (
                       <span className={`text-[11px] font-bold ${(svc.critical || 0) > 0 ? 'text-red-400' : 'text-orange-400'}`}>
                         {svc.incidents}
                       </span>
@@ -322,6 +336,13 @@ function ServicesOverviewTable({ nodes, incidents }) {
 function TopServicesWidget({ nodes, incidents }) {
   const navigate = useNavigate()
   const [hoveredSvc, setHoveredSvc] = useState(null)
+  const onlineNodes = useMemo(() => {
+    const set = new Set()
+    nodes?.forEach(node => {
+      if (Date.now() - new Date(node.last_seen).getTime() < 300000) set.add(node.node_id)
+    })
+    return set
+  }, [nodes])
   const services = useMemo(() => {
     const svcMap = {}
     nodes?.forEach(node => {
@@ -333,7 +354,7 @@ function TopServicesWidget({ nodes, incidents }) {
       })
     })
     incidents?.forEach(inc => {
-      if (svcMap[inc.service]) svcMap[inc.service].incidents++
+      if (svcMap[inc.service] && onlineNodes.has(inc.node_id)) svcMap[inc.service].incidents++
     })
     return Object.values(svcMap).sort((a, b) => b.incidents - a.incidents || b.active - a.active).slice(0, 5)
   }, [nodes, incidents])
@@ -349,6 +370,8 @@ function TopServicesWidget({ nodes, incidents }) {
   }
 
   const getStatusConfig = (svc) => {
+    const allOffline = svc.nodes.every(n => !onlineNodes.has(n.id))
+    if (allOffline) return { color: 'text-neutral-500', bg: 'bg-neutral-500/10', dot: 'bg-neutral-500', label: 'Offline' }
     if (svc.incidents > 0 && svc.inactive > 0) return { color: 'text-red-400', bg: 'bg-red-500/10', dot: 'bg-red-400', label: 'Critical' }
     if (svc.inactive > 0) return { color: 'text-orange-400', bg: 'bg-orange-500/10', dot: 'bg-orange-400', label: 'Degraded' }
     return { color: 'text-green-400', bg: 'bg-green-500/10', dot: 'bg-green-400', label: 'Healthy' }
@@ -381,9 +404,11 @@ function TopServicesWidget({ nodes, incidents }) {
                     <div className="h-full bg-primary rounded-full" style={{ width: `${svc.active + svc.inactive > 0 ? (svc.active / (svc.active + svc.inactive)) * 100 : 0}%` }} />
                   </div>
                 </div>
-                {svc.incidents > 0 && (
+                {svc.nodes.every(n => !onlineNodes.has(n.id)) ? (
+                  <span className="text-[10px] text-neutral-600 bg-neutral-500/10 px-1.5 py-0.5 rounded">—</span>
+                ) : svc.incidents > 0 ? (
                   <span className="text-[10px] text-error font-bold bg-error/10 px-1.5 py-0.5 rounded">{svc.incidents}</span>
-                )}
+                ) : null}
               </div>
               {isHovered && (
                 <div className="absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 pointer-events-none">

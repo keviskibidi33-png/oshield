@@ -8,6 +8,7 @@ export function DeployAgentModal({ open, onClose }) {
   const [token, setToken] = useState('')
   const [tokenStatus, setTokenStatus] = useState('empty')
   const [tokenCopied, setTokenCopied] = useState(false)
+  const [showToken, setShowToken] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -63,6 +64,11 @@ export function DeployAgentModal({ open, onClose }) {
   const linuxCmd = `curl -fsSL http://${server}:8080/v1/install.sh | bash -s -- --token ${token || 'YOUR_TOKEN'}`
   const windowsCmd = `powershell -Command "iwr -Uri http://${server}:8080/v1/install.ps1 -OutFile install.ps1; .\\install.ps1 -Token '${token || 'YOUR_TOKEN'}'"`
   const cmd = os === 'linux' ? linuxCmd : windowsCmd
+
+  const maskedToken = token ? '••••••••••••••••' : 'YOUR_TOKEN'
+  const linuxCmdMasked = `curl -fsSL http://${server}:8080/v1/install.sh | bash -s -- --token ${maskedToken}`
+  const windowsCmdMasked = `powershell -Command "iwr -Uri http://${server}:8080/v1/install.ps1 -OutFile install.ps1; .\\install.ps1 -Token '${maskedToken}'"`
+  const cmdDisplay = os === 'linux' ? linuxCmdMasked : windowsCmdMasked
 
   const handleCopy = async () => {
     try {
@@ -123,14 +129,22 @@ export function DeployAgentModal({ open, onClose }) {
           <div className="min-w-0">
             <label className="text-[11px] text-on-surface-variant font-medium block mb-1.5">Auth Token</label>
             <div className="flex gap-1.5 overflow-hidden">
-              <input value={token} onChange={e => { setToken(e.target.value); setTokenStatus(token ? 'ready' : 'empty') }}
-                className={`min-w-0 flex-1 bg-background border text-on-surface rounded-lg px-3 py-2 text-[13px] font-mono outline-none transition-all ${
-                  tokenStatus === 'error' ? 'border-error/50 text-error' :
-                  token ? 'border-primary/50 text-primary' :
-                  'border-[#1e2022] focus:border-primary focus:ring-1 focus:ring-primary'
-                }`}
-                placeholder={tokenStatus === 'loading' ? 'Loading...' : tokenStatus === 'error' ? 'Not available' : 'Enter or fetch token'}
-                readOnly={tokenStatus === 'loading'} />
+              <div className="relative flex-1 min-w-0">
+                <input type={showToken ? 'text' : 'password'} value={token}
+                  onChange={e => { setToken(e.target.value); setTokenStatus(token ? 'ready' : 'empty') }}
+                  className={`w-full bg-background border text-on-surface rounded-lg px-3 py-2 pr-9 text-[13px] font-mono outline-none transition-all ${
+                    tokenStatus === 'error' ? 'border-error/50 text-error' :
+                    token ? 'border-primary/50 text-primary' :
+                    'border-[#1e2022] focus:border-primary focus:ring-1 focus:ring-primary'
+                  }`}
+                  placeholder={tokenStatus === 'loading' ? 'Loading...' : tokenStatus === 'error' ? 'Not available' : 'Enter or fetch token'}
+                  readOnly={tokenStatus === 'loading'} />
+                <button onClick={() => setShowToken(!showToken)}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-0.5 rounded text-on-surface-variant hover:text-on-surface transition-colors"
+                  title={showToken ? 'Hide token' : 'Show token'}>
+                  <span className="material-symbols-outlined" style={{ fontSize: 16 }}>{showToken ? 'visibility_off' : 'visibility'}</span>
+                </button>
+              </div>
               <button onClick={fetchToken} disabled={tokenStatus === 'loading'}
                 className={`px-2 py-2 rounded-lg text-[11px] font-medium transition-all flex items-center gap-1 flex-shrink-0 ${
                   tokenStatus === 'loading' ? 'bg-surface-variant text-on-surface-variant cursor-wait' :
@@ -144,7 +158,6 @@ export function DeployAgentModal({ open, onClose }) {
                 ) : (
                   <span className="material-symbols-outlined" style={{ fontSize: 13 }}>key_off</span>
                 )}
-                {tokenStatus === 'loading' ? '' : token ? '' : ''}
               </button>
             </div>
             {token && (
@@ -168,7 +181,7 @@ export function DeployAgentModal({ open, onClose }) {
         </div>
 
         <div className="bg-black border border-[#1e2022] rounded-lg p-4 relative">
-          <code className="text-[13px] text-primary break-all leading-relaxed font-mono block pr-10">{cmd}</code>
+          <code className="text-[13px] text-primary break-all leading-relaxed font-mono block pr-10">{showToken ? cmd : cmdDisplay}</code>
           <button onClick={handleCopy}
             className="absolute top-3 right-3 p-2 rounded-md bg-surface-container-high hover:bg-surface-container-highest transition-colors">
             <span className="material-symbols-outlined text-on-surface-variant" style={{ fontSize: 16 }}>{copied ? 'check' : 'content_copy'}</span>
