@@ -5,6 +5,7 @@ import { api } from '../../lib/api'
 import { Modal } from '../shared/Modal'
 import { createPortal } from 'react-dom'
 import { DeployAgentModal } from '../shared/DeployAgentModal'
+import { useNotifications } from '../../contexts/NotificationContext'
 
 function timeAgo(d) {
   const diff = Date.now() - new Date(d).getTime()
@@ -286,6 +287,14 @@ function NodeDetail({ nodes, nodeId, navigate, incidents }) {
             <div className="glass-card p-5 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer">
               <p className="text-[12px] text-on-surface-variant uppercase tracking-wider font-medium mb-2">Last Seen</p>
               <span className="text-[18px] font-semibold text-on-surface">{isOnline ? 'Just now' : timeAgo(node.last_seen)}</span>
+              <p className="text-[11px] text-on-surface-variant mt-1">{new Date(node.last_seen).toLocaleString()}</p>
+            </div>
+            <div className="glass-card p-5 rounded-lg hover:bg-surface-container-high transition-colors cursor-pointer">
+              <p className="text-[12px] text-on-surface-variant uppercase tracking-wider font-medium mb-2">Uptime</p>
+              <span className="text-[18px] font-semibold text-on-surface">{isOnline ? 'Active' : 'Down'}</span>
+              {node.registered_at && (
+                <p className="text-[11px] text-on-surface-variant mt-1">Since {timeAgo(node.registered_at)}</p>
+              )}
             </div>
           </div>
 
@@ -397,6 +406,35 @@ function NodeDetail({ nodes, nodeId, navigate, incidents }) {
                 No incidents recorded for this node
               </div>
             )}
+          </div>
+
+          <div className="glass-card rounded-lg overflow-hidden mt-8">
+            <div className="px-6 py-4 border-b border-[#1e2022] bg-[#141617] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary" style={{ fontSize: 18 }}>terminal</span>
+                <h3 className="text-[12px] uppercase tracking-widest text-on-surface-variant font-medium">Last Logs</h3>
+              </div>
+              <button onClick={() => navigate('/logs', { state: { search: nodeId } })}
+                className="text-[11px] text-primary hover:text-primary/80 transition-colors flex items-center gap-1">
+                View all
+                <span className="material-symbols-outlined" style={{ fontSize: 14 }}>open_in_new</span>
+              </button>
+            </div>
+            <div className="p-4 font-mono text-[12px] max-h-[200px] overflow-y-auto custom-scrollbar bg-black/40">
+              {nodeIncidents.length > 0 ? (
+                nodeIncidents.slice(0, 5).map((inc, i) => (
+                  <div key={inc.id} className="py-1.5 border-b border-[#1e2022]/30 last:border-b-0">
+                    <span className="text-on-surface-variant">[{new Date(inc.timestamp).toLocaleTimeString()}]</span>{' '}
+                    <span className={`${inc.status === 'critical' ? 'text-error' : inc.status === 'resolved' ? 'text-primary' : 'text-tertiary'}`}>
+                      {inc.status.toUpperCase()}
+                    </span>{' '}
+                    <span className="text-on-surface">{inc.log_line}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-on-surface-variant/50 py-4 text-center">No logs available for this node</p>
+              )}
+            </div>
           </div>
         </div>
       </main>
@@ -548,11 +586,41 @@ export function NodesView() {
   const filtersRef = useRef(null)
   const navigate = useNavigate()
   const { id: nodeId } = useParams()
+  const { addNotification, showDesktopNotification } = useNotifications()
+  const prevNodesRef = useRef(null)
 
   const fetchNodes = useCallback(() => api.get('/nodes'), [])
   const fetchIncidents = useCallback(() => api.get('/incidents'), [])
   const { data: nodes } = usePolling(fetchNodes)
   const { data: incidents } = usePolling(fetchIncidents, 3000)
+
+  useEffect(() => {
+    if (!nodes || prevNodesRef.current === null) {
+      prevNodesRef.current = nodes?.map(n => ({
+        id: n.node_id,
+        online: Date.now() - new Date(n.last_seen).getTime() < 300000
+      })) || []
+      return
+    }
+    for (const node of nodes) {
+      const wasOnline = prevNodesRef.current.find(p => p.id === node.node_id)?.online
+      const isOnline = Date.now() - new Date(node.last_seen).getTime() < 300000
+      if (wasOnline && !isOnline) {
+        const lastSeen = new Date(node.last_seen).toLocaleString()
+        addNotification({
+          type: 'error',
+          title: `Node Offline: ${node.name}`,
+          body: `${node.node_id} went offline. Last connection: ${lastSeen}`,
+          severity: 'critical'
+        })
+        showDesktopNotification(`Node Offline: ${node.name}`, `${node.node_id} last seen ${lastSeen}`)
+      }
+    }
+    prevNodesRef.current = nodes.map(n => ({
+      id: n.node_id,
+      online: Date.now() - new Date(n.last_seen).getTime() < 300000
+    }))
+  }, [nodes])
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -812,8 +880,14 @@ export function NodesView() {
           <div className="flex items-center justify-between mb-4">
             <h4 className="text-[12px] text-on-surface-variant uppercase tracking-widest font-medium">Fleet Status</h4>
             <span className="flex h-2 w-2 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+              {onlineCount > 0 ? (
+                <>
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
+                </>
+              ) : (
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-error" />
+              )}
             </span>
           </div>
           <div className="space-y-3">
