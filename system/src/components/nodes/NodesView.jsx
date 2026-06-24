@@ -568,7 +568,7 @@ export function NodesView() {
 
   const filtered = (nodes || []).filter(n => {
     const matchSearch = !search || n.name?.toLowerCase().includes(search.toLowerCase()) || n.node_id?.toLowerCase().includes(search.toLowerCase())
-    const isOnline = Date.now() - new Date(n.last_seen).getTime() < 60000
+    const isOnline = Date.now() - new Date(n.last_seen).getTime() < 300000
     const matchStatus = statusFilter === 'all' ||
       (statusFilter === 'online' && isOnline) ||
       (statusFilter === 'offline' && !isOnline)
@@ -664,9 +664,9 @@ export function NodesView() {
           </div>
 
           <div className="flex items-center justify-between mb-4">
-            <div className={`flex items-center gap-2 text-[12px] uppercase tracking-wider font-medium ${filtered.length > 0 ? 'text-on-surface-variant' : 'text-error'}`}>
-              <span className={`w-2 h-2 rounded-full ${filtered.length > 0 ? 'bg-green-500' : 'bg-error'}`} />
-              {filtered.length} nodes {search || statusFilter !== 'all' || osFilter !== 'all' ? 'found' : 'active'}
+            <div className={`flex items-center gap-2 text-[12px] uppercase tracking-wider font-medium ${onlineCount > 0 ? 'text-on-surface-variant' : 'text-error'}`}>
+              <span className={`w-2 h-2 rounded-full ${onlineCount > 0 ? 'bg-green-500' : 'bg-error'}`} />
+              {onlineCount} nodes {search || statusFilter !== 'all' || osFilter !== 'all' ? 'found' : 'active'}
             </div>
             {(statusFilter !== 'all' || osFilter !== 'all') && (
               <button onClick={() => { setStatusFilter('all'); setOsFilter('all') }}
