@@ -191,7 +191,7 @@ func (api *ServerAPI) IngestTelemetry(w http.ResponseWriter, r *http.Request) {
 	if !found {
 		// Log cache miss and trigger analysis engine
 		log.Printf("[Server] Cache miss for log line: %s. Performing analysis...", payload.LogLine[:min(len(payload.LogLine), 40)])
-		diag = engine.AnalyzeLog(payload.LogLine, payload.Service)
+		diag = engine.AnalyzeLog(payload.LogLine, payload.Service, api.Cfg.MistralAPIKey, api.Cfg.MistralModel)
 		api.Cache.Set(payload.LogLine, diag)
 	} else {
 		log.Printf("[Server] Cache hit for log line: %s. Serving cached diagnosis.", payload.LogLine[:min(len(payload.LogLine), 40)])
@@ -199,7 +199,7 @@ func (api *ServerAPI) IngestTelemetry(w http.ResponseWriter, r *http.Request) {
 
 	// Determine diagnosis source
 	diagSource := "heuristic"
-	if os.Getenv("OPENAI_API_KEY") != "" {
+	if api.Cfg.MistralAPIKey != "" {
 		diagSource = "ai"
 	}
 
@@ -281,10 +281,10 @@ func (api *ServerAPI) SimulateCrash(w http.ResponseWriter, r *http.Request) {
 
 	// Trigger mock postgresql telemetry log
 	logLine := "[CRITICAL] postgresql database query failed: lock timeout after 10000ms. transaction blocked."
-	diag := engine.AnalyzeLog(logLine, "postgresql")
+	diag := engine.AnalyzeLog(logLine, "postgresql", api.Cfg.MistralAPIKey, api.Cfg.MistralModel)
 
 	diagSource := "heuristic"
-	if os.Getenv("OPENAI_API_KEY") != "" {
+	if api.Cfg.MistralAPIKey != "" {
 		diagSource = "ai"
 	}
 
@@ -447,12 +447,11 @@ func (api *ServerAPI) ReanalyzeIncident(w http.ResponseWriter, r *http.Request) 
 
 	// Force fresh AI analysis (bypass cache)
 	log.Printf("[Server] Re-analyzing incident %s with AI (log: %s...)", incidentID, target.LogLine[:min(len(target.LogLine), 40)])
-	diag := engine.AnalyzeLog(target.LogLine, target.Service)
+	diag := engine.AnalyzeLog(target.LogLine, target.Service, api.Cfg.MistralAPIKey, api.Cfg.MistralModel)
 
 	// Determine source
 	source := "heuristic"
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey != "" {
+	if api.Cfg.MistralAPIKey != "" {
 		source = "reanalyzed"
 	}
 

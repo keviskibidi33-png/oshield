@@ -21,6 +21,8 @@ export function SettingsView() {
   const [saved, setSaved] = useState(false)
   const [teams, setTeams] = useState([])
   const [users, setUsers] = useState([])
+  const [showToken, setShowToken] = useState(false)
+  const [tokenCopied, setTokenCopied] = useState(false)
 
   const [serverConfig, setServerConfig] = useState({
     port: '8080',
@@ -75,8 +77,8 @@ export function SettingsView() {
   ]
 
   return (
-    <div className="max-w-[1280px] mx-auto flex flex-1 overflow-hidden">
-      <aside className="w-64 bg-transparent border-r border-[#1e2022] hidden md:flex flex-col p-4 gap-1">
+    <div className="max-w-[1280px] mx-auto flex flex-1 overflow-hidden h-full">
+      <aside className="w-64 bg-transparent border-r border-[#1e2022] hidden md:flex flex-col h-full p-4 gap-1">
         <div className="px-3 py-4 mb-2">
           <p className="text-[12px] text-on-surface-variant uppercase tracking-widest font-medium">Configuration</p>
         </div>
@@ -233,8 +235,26 @@ export function SettingsView() {
                   <div className="p-4 bg-black/40 border border-[#1e2022]/30 rounded-lg">
                     <label className="text-[11px] text-on-surface-variant uppercase tracking-wider font-medium block mb-2">Current Token</label>
                     <div className="flex items-center gap-3">
-                      <code className="text-[14px] text-primary font-mono flex-1">••••••••••••••••••••••••••••••••</code>
-                      <span className="text-[11px] text-on-surface-variant bg-surface-container-high px-2 py-1 rounded">Set via OZY_AUTH_TOKEN</span>
+                      <code className="text-[14px] text-primary font-mono flex-1 select-all">
+                        {showToken ? (localStorage.getItem('ozyshield_token') || '••••••••••••••••••••••••••••••••') : '••••••••••••••••••••••••••••••••'}
+                      </code>
+                      <div className="flex items-center gap-1">
+                        <button onClick={() => setShowToken(!showToken)}
+                          className="p-2 rounded-lg hover:bg-surface-container-high transition-colors text-on-surface-variant hover:text-on-surface"
+                          title={showToken ? 'Hide token' : 'Show token'}>
+                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{showToken ? 'visibility_off' : 'visibility'}</span>
+                        </button>
+                        <button onClick={() => {
+                            const token = localStorage.getItem('ozyshield_token') || ''
+                            navigator.clipboard.writeText(token)
+                            setTokenCopied(true)
+                            setTimeout(() => setTokenCopied(false), 2000)
+                          }}
+                          className="p-2 rounded-lg hover:bg-surface-container-high transition-colors text-on-surface-variant hover:text-on-surface"
+                          title="Copy token">
+                          <span className="material-symbols-outlined" style={{ fontSize: 18 }}>{tokenCopied ? 'check' : 'content_copy'}</span>
+                        </button>
+                      </div>
                     </div>
                   </div>
                   <div className="p-4 bg-error-container/10 border border-error/20 rounded-lg flex gap-3 items-start">
@@ -312,13 +332,13 @@ export function SettingsView() {
                 </div>
                 <div className="p-6 grid grid-cols-2 gap-4">
                   {[
-                    { os: 'Ubuntu / Debian', icon: 'terminal', cmd: 'curl + bash' },
-                    { os: 'CentOS / Fedora', icon: 'terminal', cmd: 'curl + bash' },
-                    { os: 'macOS', icon: 'desktop_mac', cmd: 'curl + bash' },
-                    { os: 'Windows Server', icon: 'computer', cmd: 'PowerShell' },
+                    { os: 'Ubuntu / Debian', img: '/images/platforms/ubuntulog.png', cmd: 'curl + bash' },
+                    { os: 'CentOS / Fedora', img: '/images/platforms/centlog.png', cmd: 'curl + bash' },
+                    { os: 'macOS', img: '/images/platforms/macoslog.png', cmd: 'curl + bash' },
+                    { os: 'Windows Server', img: '/images/platforms/winlog.png', cmd: 'PowerShell' },
                   ].map(p => (
                     <div key={p.os} className="flex items-center gap-3 p-3 rounded-lg bg-surface-container-low border border-[#1e2022]/20">
-                      <span className="material-symbols-outlined text-primary" style={{ fontSize: 20 }}>{p.icon}</span>
+                      <img src={p.img} alt={p.os} className="w-8 h-8 rounded object-contain" />
                       <div>
                         <p className="text-[13px] font-medium text-on-surface">{p.os}</p>
                         <p className="text-[11px] text-on-surface-variant">{p.cmd}</p>

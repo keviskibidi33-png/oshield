@@ -18,6 +18,8 @@ type Config struct {
 	SessionTimeoutMin      int
 	SeedData               bool
 	ReoccurrenceWindowMin  int
+	MistralAPIKey          string
+	MistralModel           string
 }
 
 func Load() *Config {
@@ -34,6 +36,8 @@ func Load() *Config {
 		SessionTimeoutMin:     60,
 		SeedData:              getEnv("OZY_SEED_DATA", "false") == "true",
 		ReoccurrenceWindowMin: getEnvInt("OZY_REOCCURRENCE_WINDOW_MIN", 1),
+		MistralAPIKey:         getEnv("MISTRAL_API_KEY", ""),
+		MistralModel:          getEnv("MISTRAL_MODEL", "mistral-small-latest"),
 	}
 }
 

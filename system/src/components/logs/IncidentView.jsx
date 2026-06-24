@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from 'react'
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { createPortal } from 'react-dom'
 import { usePolling } from '../../hooks/useApi'
@@ -179,6 +179,11 @@ export function IncidentView() {
   const [showTeamModal, setShowTeamModal] = useState(false)
   const [showNodeModal, setShowNodeModal] = useState(false)
   const [teams, setTeams] = useState([])
+  const [displayedDiagnosis, setDisplayedDiagnosis] = useState('')
+  const [isTyping, setIsTyping] = useState(false)
+  const [shouldAnimate, setShouldAnimate] = useState(false)
+  const typingRef = useRef(null)
+  const prevDiagRef = useRef(null)
   const navigate = useNavigate()
   const { id: incidentId } = useParams()
 
@@ -234,12 +239,44 @@ export function IncidentView() {
   const handleReanalyze = async () => {
     if (!incident || reanalyzing) return
     setReanalyzing(true)
+    setDisplayedDiagnosis('')
+    setIsTyping(false)
+    setShouldAnimate(true)
+    if (typingRef.current) clearInterval(typingRef.current)
     try {
       await api.post(`/incidents/${incident.id}/reanalyze`)
       await refetch()
     } catch (e) { console.error(e) }
     setReanalyzing(false)
   }
+
+  useEffect(() => {
+    if (!incident?.diagnosis) {
+      setDisplayedDiagnosis(incident?.diagnosis || '')
+      return
+    }
+    if (!shouldAnimate) {
+      setDisplayedDiagnosis(incident.diagnosis)
+      prevDiagRef.current = incident.diagnosis
+      return
+    }
+    if (incident.diagnosis === prevDiagRef.current) return
+    prevDiagRef.current = incident.diagnosis
+    const fullText = incident.diagnosis
+    let i = 0
+    setIsTyping(true)
+    setDisplayedDiagnosis('')
+    typingRef.current = setInterval(() => {
+      i++
+      setDisplayedDiagnosis(fullText.slice(0, i))
+      if (i >= fullText.length) {
+        clearInterval(typingRef.current)
+        setIsTyping(false)
+        setShouldAnimate(false)
+      }
+    }, 18)
+    return () => { if (typingRef.current) clearInterval(typingRef.current) }
+  }, [incident?.diagnosis, shouldAnimate])
 
   const handleGenerateReport = () => {
     if (!incident) return
@@ -497,9 +534,9 @@ export function IncidentView() {
               </div>
             </div>
           </div>
-          <div className="bg-black/40 border border-[#1e2022]/30 p-5 rounded-lg mb-6 leading-relaxed">
+          <div className="bg-black/40 border border-[#1e2022]/30 p-5 rounded-lg mb-6 leading-relaxed min-h-[80px]">
             <p className="text-[16px] text-on-surface">
-              System intelligence has detected a <span className="text-primary font-bold">coordinated pattern</span> in {incident.service} logs. {incident.diagnosis}
+              System intelligence has detected a <span className="text-primary font-bold">coordinated pattern</span> in {incident.service} logs. {displayedDiagnosis}{isTyping && <span className="inline-block w-[2px] h-[16px] bg-primary ml-0.5 align-middle animate-pulse" />}
             </p>
           </div>
           <div className="grid grid-cols-2 gap-4">

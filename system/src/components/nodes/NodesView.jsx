@@ -576,7 +576,7 @@ export function NodesView() {
     return matchSearch && matchStatus && matchOs
   })
 
-  const onlineCount = nodes?.filter(n => Date.now() - new Date(n.last_seen).getTime() < 60000).length || 0
+  const onlineCount = nodes?.filter(n => Date.now() - new Date(n.last_seen).getTime() < 300000).length || 0
   const activeServices = nodes?.reduce((acc, n) => acc + Object.values(n.services || {}).filter(s => s === 'active').length, 0) || 0
   const totalServices = nodes?.reduce((acc, n) => acc + Object.keys(n.services || {}).length, 0) || 0
   const criticalIncidents = incidents?.filter(i => i.status === 'critical').length || 0

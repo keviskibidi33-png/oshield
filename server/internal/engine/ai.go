@@ -7,32 +7,29 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
 
-// AnalyzeLog acts as our LLM processor.
-// In development/MVP mode, it uses expert heuristic rule matching to produce highly accurate structural diagnostics.
-// If OPENAI_API_KEY environment variable is set, it performs a real LLM analysis.
-func AnalyzeLog(logLine string, service string) CachedDiagnosis {
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey != "" {
-		diag, err := callOpenAI(apiKey, logLine, service)
+func AnalyzeLog(logLine string, service string, mistralAPIKey string, mistralModel string) CachedDiagnosis {
+	if mistralAPIKey != "" {
+		diag, err := callMistral(mistralAPIKey, mistralModel, logLine, service)
 		if err == nil {
 			return diag
 		}
-		log.Printf("[Warning] OpenAI diagnosis failed: %v. Falling back to local heuristics.", err)
+		log.Printf("[AI] Mistral fallback to heuristics: %v", err)
 	}
 
 	return analyzeHeuristic(logLine, service)
 }
 
-func callOpenAI(apiKey string, logLine string, service string) (CachedDiagnosis, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+func callMistral(apiKey string, model string, logLine string, service string) (CachedDiagnosis, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	url := "https://api.openai.com/v1/chat/completions"
+	if model == "" {
+		model = "mistral-small-latest"
+	}
 
 	type message struct {
 		Role    string `json:"role"`
@@ -42,21 +39,18 @@ func callOpenAI(apiKey string, logLine string, service string) (CachedDiagnosis,
 	type request struct {
 		Model          string    `json:"model"`
 		Messages       []message `json:"messages"`
-		ResponseFormat struct {
+		ResponseFormat *struct {
 			Type string `json:"type"`
-		} `json:"response_format"`
+		} `json:"response_format,omitempty"`
+		Temperature float64 `json:"temperature"`
+		MaxTokens   int     `json:"max_tokens"`
 	}
 
-	model := os.Getenv("OPENAI_MODEL")
-	if model == "" {
-		model = "gpt-4o-mini"
-	}
-
-	prompt := `Eres un experto SRE y arquitecto de sistemas. Analiza el siguiente log de error de infraestructura y proporciona un diagnóstico y los pasos de solución.
+	prompt := `Eres un experto SRE y arquitecto de sistemas de nivel Staff. Analiza el siguiente log de error de infraestructura y proporciona un diagnóstico profesional y los pasos de solución.
 Debes responder estrictamente en formato JSON con la siguiente estructura:
 {
   "title": "Título corto y descriptivo del incidente (máximo 60 caracteres, en inglés)",
-  "cause": "Breve explicación en español de la causa raíz",
+  "cause": "Breve explicación en español de la causa raíz (2-3 oraciones máximo)",
   "steps": [
     "Paso 1: Qué hacer para verificar o solucionar",
     "Paso 2: Comando o acción correctora",
@@ -64,8 +58,11 @@ Debes responder estrictamente en formato JSON con la siguiente estructura:
   ]
 }
 
+NO incluyas texto fuera del JSON. Solo el JSON.
+
 Log de error:
 "` + logLine + `"
+
 Servicio relacionado: ` + service
 
 	reqBody := request{
@@ -73,15 +70,16 @@ Servicio relacionado: ` + service
 		Messages: []message{
 			{Role: "user", Content: prompt},
 		},
+		Temperature: 0.3,
+		MaxTokens:   512,
 	}
-	reqBody.ResponseFormat.Type = "json_object"
 
 	jsonData, err := json.Marshal(reqBody)
 	if err != nil {
 		return CachedDiagnosis{}, err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(jsonData))
+	req, err := http.NewRequestWithContext(ctx, "POST", "https://api.mistral.ai/v1/chat/completions", bytes.NewBuffer(jsonData))
 	if err != nil {
 		return CachedDiagnosis{}, err
 	}
@@ -101,7 +99,11 @@ Servicio relacionado: ` + service
 		return CachedDiagnosis{}, err
 	}
 
-	type openAIResponse struct {
+	if resp.StatusCode != 200 {
+		return CachedDiagnosis{}, io.ErrUnexpectedEOF
+	}
+
+	type llmResponse struct {
 		Choices []struct {
 			Message struct {
 				Content string `json:"content"`
@@ -109,17 +111,23 @@ Servicio relacionado: ` + service
 		} `json:"choices"`
 	}
 
-	var oaiResp openAIResponse
-	if err := json.Unmarshal(body, &oaiResp); err != nil {
+	var llmResp llmResponse
+	if err := json.Unmarshal(body, &llmResp); err != nil {
 		return CachedDiagnosis{}, err
 	}
 
-	if len(oaiResp.Choices) == 0 {
+	if len(llmResp.Choices) == 0 {
 		return CachedDiagnosis{}, io.ErrUnexpectedEOF
 	}
 
+	content := llmResp.Choices[0].Message.Content
+	content = strings.TrimPrefix(content, "```json")
+	content = strings.TrimPrefix(content, "```")
+	content = strings.TrimSuffix(content, "```")
+	content = strings.TrimSpace(content)
+
 	var diag CachedDiagnosis
-	err = json.Unmarshal([]byte(oaiResp.Choices[0].Message.Content), &diag)
+	err = json.Unmarshal([]byte(content), &diag)
 	if err != nil {
 		return CachedDiagnosis{}, err
 	}
@@ -130,7 +138,6 @@ Servicio relacionado: ` + service
 func analyzeHeuristic(logLine string, service string) CachedDiagnosis {
 	normalized := strings.ToLower(logLine)
 
-	// 1. PostgreSQL Diagnostics
 	if service == "postgresql" || strings.Contains(normalized, "postgres") || strings.Contains(normalized, "pq:") {
 		if strings.Contains(normalized, "lock timeout") || strings.Contains(normalized, "deadlock") {
 			return CachedDiagnosis{
@@ -167,7 +174,6 @@ func analyzeHeuristic(logLine string, service string) CachedDiagnosis {
 		}
 	}
 
-	// 2. Nginx Diagnostics
 	if service == "nginx" || strings.Contains(normalized, "nginx") {
 		if strings.Contains(normalized, "502 bad gateway") || strings.Contains(normalized, "connect() failed") {
 			return CachedDiagnosis{
@@ -204,11 +210,10 @@ func analyzeHeuristic(logLine string, service string) CachedDiagnosis {
 		}
 	}
 
-	// 3. Out of Memory (OOM) Diagnostics
 	if strings.Contains(normalized, "out of memory") || strings.Contains(normalized, "oom-killer") || strings.Contains(normalized, "killed process") {
 		return CachedDiagnosis{
 			Title: "Out of Memory (OOM Kill)",
-			Cause: "El sistema operativo agotó su memoria física (RAM) disponible y activó el proceso OOM-Killer para forzar el cierre de procesos de alto consumo y evitar un pánico general.",
+			Cause: "El sistema operativo agotó su memoria física (RAM) disponible y activó el proceso OOM-Killer para forzar el cierre de procesos de alto consumo.",
 			Steps: []string{
 				"Consultar el registro dmesg del sistema para identificar el proceso exacto sacrificado: 'dmesg -T | grep -i -E \"oom|kill\"'.",
 				"Identificar fugas de memoria o procesos que consuman RAM de forma excesiva usando htop o pidstat.",
@@ -217,7 +222,6 @@ func analyzeHeuristic(logLine string, service string) CachedDiagnosis {
 		}
 	}
 
-	// 4. Redis Diagnostics
 	if service == "redis" || strings.Contains(normalized, "redis") {
 		if strings.Contains(normalized, "out of memory") || strings.Contains(normalized, "maxmemory limit reached") {
 			return CachedDiagnosis{
@@ -232,7 +236,6 @@ func analyzeHeuristic(logLine string, service string) CachedDiagnosis {
 		}
 	}
 
-	// 5. Fallback Heuristics
 	return CachedDiagnosis{
 		Title: "Infrastructure Warning Detected",
 		Cause: "Se ha detectado una advertencia o error en los logs de la infraestructura. La firma del evento no coincide con patrones conocidos del sistema.",

@@ -56,6 +56,11 @@ func main() {
 	log.Printf("   Token: %s", cfg.AuthToken)
 	log.Printf("   Registration: %v", cfg.EnableRegister)
 	log.Printf("   Seed data: %v", cfg.SeedData)
+	if cfg.MistralAPIKey != "" {
+		log.Printf("   AI Provider: Mistral (%s)", cfg.MistralModel)
+	} else {
+		log.Println("   AI Provider: Local heuristics (set MISTRAL_API_KEY for AI analysis)")
+	}
 	if err := http.ListenAndServe(serverAddr, mux); err != nil {
 		log.Fatalf("Fatal: Failed to start web server: %v", err)
 	}
@@ -115,7 +120,7 @@ func seedMockData(store db.Store) {
 	store.RegisterNode(node1)
 	store.RegisterNode(node2)
 
-	diag := engine.AnalyzeLog("[CRITICAL] postgresql database query failed: lock timeout after 10000ms. transaction blocked.", "postgresql")
+	diag := engine.AnalyzeLog("[CRITICAL] postgresql database query failed: lock timeout after 10000ms. transaction blocked.", "postgresql", "", "")
 	inc := db.Incident{
 		ID:          "inc_seed_001",
 		NodeID:      "vm-primary-postgres",
